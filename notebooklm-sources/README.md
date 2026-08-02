@@ -1,0 +1,27 @@
+# NotebookLM Source Bundle — Vision-guided MORL (UR5)
+
+Plain-text extracts of the papers for uploading to NotebookLM. Generated 2026-08-02 from PDFs in `papers/` via `pdftotext`.
+
+## Tier 1 (core)
+| File | Paper |
+|------|-------|
+| `tier1/01-mo-gymnasium.txt` | A Toolkit for Reliable Benchmarking and Research in MORL |
+| `tier1/07-diffusion-policy.txt` | Diffusion Policy: Visuomotor Policy Learning via Action Diffusion |
+| `tier1/11-demo-enhanced-morl-nav.txt` | Demonstration-Enhanced Adaptable Multi-Objective Robot Navigation |
+| `tier1/13-pgmorl.txt` | Prediction-Guided MORL for Continuous Robot Control |
+
+**Note**: Tier 1 also lists PRC-CMORL (10) in the original plan, but no PDF is saved in `papers/` yet. The reference note is at `references/10-prc-cmorl.md`; extract text from the arXiv PDF when available and place as `tier1/10-prc-cmorl.txt`.
+
+## Tier 2 (supporting)
+| File | Paper |
+|------|-------|
+| `tier2/02-mo-mpo.txt` | A Distributional View on Multi-Objective Policy Optimization |
+| `tier2/04-3d-diffusion-policy.txt` | 3D Diffusion Policy (DP3) |
+| `tier2/08-gcr-ppo.txt` | Scalable Multi-Objective Robot RL through Gradient Conflict Resolution |
+| `tier2/14-pareto-visual-navigation.txt` | Navigating the Wild: Pareto-Optimal Visual Decision-Making in Image Space |
+| `tier2/16-envelope-morl.txt` | A Generalized Algorithm for MORL and Policy Adaptation |
+
+## Upload tips
+- Upload each `.txt` as a separate source in NotebookLM.
+- Ask NotebookLM for: (1) a comparison table of MORL algorithms, (2) methodology details of GCR-PPO vs. PD-MORL, (3) UR5 hardware/setup facts, (4) open research gaps at the vision × MORL intersection.
+- Beware: pdftotext output contains layout artifacts (line-break math, duplicated text). For 02-mo-mpo.txt there are "Badly formatted number" warnings but text is usable.

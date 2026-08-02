@@ -1,0 +1,872 @@
+Demonstration-Enhanced Adaptable Multi-Objective Robot Navigation
+
+arXiv:2404.04857v5 [cs.RO] 18 Oct 2025
+
+Jorge de Heuvel
+
+Tharun Sethuraman
+
+Abstract— Preference-aligned robot navigation in human
+environments is typically achieved through learning-based
+approaches, utilizing user feedback or demonstrations for
+personalization. However, personal preferences are subject to
+change and might even be context-dependent. Yet traditional
+reinforcement learning (RL) approaches with static reward
+functions often fall short in adapting to evolving user preferences,
+inevitably reflecting demonstrations once training is completed.
+This paper introduces a structured framework that combines
+demonstration-based learning with multi-objective reinforcement
+learning (MORL). To ensure real-world applicability, our
+approach allows for dynamic adaptation of the robot navigation
+policy to changing user preferences without retraining. It fluently
+modulates the amount of demonstration data reflection and other
+preference-related objectives. Through rigorous evaluations,
+including a baseline comparison and sim-to-real transfer on two
+robots, we demonstrate our framework’s capability to adapt to
+user preferences accurately while achieving high navigational
+performance in terms of collision avoidance and goal pursuance.
+
+I. I NTRODUCTION
+Mobile robot navigation has significantly advanced with
+deep reinforcement learning (RL), enabling end-to-end policies that traverse complex environments with foresighted
+and nuanced behaviors. In scenarios involving human-robot
+interaction, however, it becomes crucial to align these
+policies with user preferences [1], [2], e.g., on approaching
+behavior, proxemics, and navigational efficiency, to achieve
+acceptance [3].
+However, traditional RL-based navigation methods typically
+optimize for static and pre-configured objectives in their reward scheme such as path efficiency or obstacle avoidance [4],
+neglecting user preferences and their variability over time.
+As a result, these methods lack mechanisms to adapt to
+shifting user preferences dynamically and require retraining
+to accommodate behavior changes, highlighting a significant
+gap in the current methodology.
+A common strategy for addressing user preferences is
+learning from demonstrations. To preference-align RL-based
+navigation around the human, de Heuvel et al. [2], [5]
+have employed an additional behavior cloning loss driven
+by demonstration data. However, these approaches do not
+provide principled ways to dynamically trade off demonstrated
+behaviors against core navigation objectives such as efficiency
+All authors are with the Humanoid Robots Lab, University of Bonn,
+Germany. M. Bennewitz and J. de Heuvel are additionally with the Lamarr
+Institute for Machine Learning and Artificial Intelligence and the Center
+for Robotics, Bonn, Germany. This work has been partially funded by the
+BMBF, grant No. 16KIS1949 and within the Robotics Institute Germany,
+grant No. 16ME0999, as well as by the DFG, grant No. BE 4420/2-2 (FOR
+2535 Anticipating Human Behavior).
+We sincerely thank Murad Dawood for his valuable feedback in revising
+the manuscript.
+
+Maren Bennewitz
+
+Fig. 1: Our framework integrates demonstration-based learning into multiobjective reinforcement learning, enabling robots to adapt navigation policies
+to users’ changing preferences even after training. a) The navigation style
+can fluently shift between demonstration-induced, distance keeping, and
+efficiency objectives. b) We modulate the MORL reward vector r t with a
+c) varying preference λ, while providing λ as input to the agent. d) The
+resulting human-centered policy can generate a spectrum of trajectories,
+here sketched for the objectives of demonstration-reflection (red, here: wallfollowing) and path efficiency (yellow).
+
+and collision avoidance. This can lead to overly conservative
+or inconsistent behavior, reducing usability in real-world
+applications. It becomes essential to devise mechanisms
+that can modulate the influence of demonstrations by user
+preferences, even after training.
+To overcome these challenges, we propose a novel framework that integrates demonstration-based learning (LfD)
+into multi-objective reinforcement learning (MORL) to
+achieve flexible and preference-aware robot navigation (see
+Fig. 1). This combination extends MORL’s on-the-fly policy
+adaptation capabilities [6] by modulating the influence of
+demonstrations and other objectives without retraining.
+Specifically, our combined approach of LfD and MORL
+provides a structured way to incorporate user demonstrations
+as one of multiple competing objectives, enabling situationally
+adaptable trade-offs between demonstration adherence and
+navigational core objectives Focusing on the robotic application, our experimental results demonstrate robust performance
+and accurate preference reflection for both a static and moving
+user. Finally, a comprehensive sim-to-real transfer on two
+different robotic platforms further validates the feasibility
+and robustness of our method in human-centered navigation
+tasks.
+In summary, the main contributions of our work are:
+• A multi-objective reinforcement learning human-aware
+robot navigation framework that enables policy adaptation to preferences post-training.
+• The structured incorporation of demonstration data as a
+tuneable objective.
+• Comparative navigation experiments in simulation validating demonstration modulation, behavior adaptation,
+robustness and generalization, concluded by a real-world
+transfer and evaluation on two different robots.
+
+II. R ELATED W ORK
+The concept of user-aware personalized navigation is
+gaining momentum, emphasizing robots that adapt their
+strategies based on individual user preferences. Users can
+express preferences through ranking trajectory queries [7],
+[8] or providing demonstrations [2], [5], [9]. Both feedback
+types can distill a preference-aligned navigation policy. While
+trajectory ranking can be used to extract user preferences [10],
+this work establishes a demonstration-infused policy that
+aligns on-the-fly without retraining through multi-objective
+reinforcement learning (MORL).
+The concept of optimizing for multiple objectives has
+already been applied in traditional non-RL navigation approaches [11], [12], [13]. Traditional methods however are
+limited by their inability to integrate preference-conveying
+demonstration data. In the context of RL, MORL extends
+standard RL by enabling the simultaneous optimization of
+multiple objectives. MORL frameworks exist for discrete [14]
+and continuous action spaces [15], [16], while the latter are
+particularly interesting for robotic tasks. So far, MORL has
+been applied to autonomous driving [17] and robotic tasks
+such as manipulation [18], navigation [10], [19], [20], [21],
+and path planning [22].
+Ballou et al. [23] used meta reinforcement learning to
+adjust robot navigation among humans, efficiently fine-tuning
+policies for changes in the reward function, such as goal
+pursuance or distance keeping. However, their adaptation to
+shifting objectives is not instantaneous but rather requires
+an adaptation training phase. In contrast, our MORL policy
+adapts to preference weight changes in the preference space
+immediately.
+Cheng et al. [19] proposed a MORL-based navigation
+policy that adapts to dynamic preferences over multiple
+navigation objectives in human environments, utilizing deep
+Q-networks for preference-weighted action selection. Similar
+to our approach, their method processes 2D lidar data as input.
+However, unlike our approach, they employ a discrete action
+space with acceleration commands, whereas we utilize MORLenabled TD3 actor-critic architecture with a continuous action
+space of linear and angular velocity control for smooth
+motions.
+Cheng et al. [20] presented an approach to learn robot
+navigation in human-populated environments leveraging a
+multi-objective reward vector formulation. Compared to our
+study, they are not accounting for different preferences, as
+their approach optimizes a fixed set of objectives without
+mechanisms to adjust trade-offs dynamically. Choi et al.
+[7] proposed to use multi-agent training with parameterized
+rewards and action commands for adaptable robot navigation.
+Parameterized rewards can be used with standard RL policies,
+potentially at the cost of weaker multi-objective optimization.
+In contrast, our agent estimates Q-values for different objectives separately while incorporating tunable demonstrations
+alongside other navigation objectives.
+Hwang et al. [9] proposed a vision-based MORL framework for adapting robot navigation with discrete actions
+
+to human preferences through demonstrations, trajectory
+comparisons, and language instructions. However, their use
+of demonstrations is limited to estimating corresponding bestrepresenting preference weights based on given objectives,
+possibly losing nuanced behavior traits in the demonstration
+data, whereas our approach directly integrates demonstration
+data to shape navigation behavior.
+III. O UR A PPROACH
+A. Problem Statement
+We consider a wheeled robot navigating in the vicinity of
+a human and unknown obstacles, pursuing a local goal while
+avoiding collisions. The robot is controlled via continuous
+velocity commands. The human has certain preferences
+about the navigation style of the robot that may change
+depending on navigational context, such as task or time
+constraints, and which should be considered by the robot
+while navigating to the goal. These navigation preferences
+can be expressed both in the form of a preference vector
+and demonstrations. We assume the robot is provided a
+robot-centric goal location and can reliably estimate the
+human position, obstacles are perceived by the robot through
+2D lidar. The navigation policy processes sensor data and
+goal information along with a preference vector containing
+user preferences, allowing for on-the-fly behavior adaptation
+within a single policy. Our approach explicitly focuses on
+single-human interaction, personalizing robot behavior based
+on individual user preferences rather than group dynamics.
+Code for our approach is available online.1
+B. Multi-Objective Reinforcement Learning
+Multi-objective reinforcement learning (MORL) enhances
+traditional RL by integrating multiple, often conflicting,
+objectives [6]. In MORL, the agent is trained to learn policies
+that strike a balance among these diverse objectives, as
+opposed to a one-dimensional reward function. The MORL
+problem is formulated within the framework of a Markov
+Decision Process (MDP), defined by the tuple (S, A, P, R, γ).
+Here, S is the state space, A is the action space, P :
+S × A × S → [0, 1] is the state transition probability, and γ
+is the discount factor. A distinctive feature of MORL is the
+multi-dimensional reward function R : S × A → Rn , which
+outputs a vector of rewards r t for n different objectives.
+A single policy optimally adheres to a given combination
+of preferences, represented by the convex preference weight
+vector λ ∈ Rn . The learning algorithm optimizes a scalarized reward function Rλ (s, a) = λ⊤ r(s, a), itemizing the
+different objectives.
+We employ the preference-driven (PD-)MORL implementation of Basaklar et al. [15], precisely their TD3-based
+algorithm, which can learn a single-network policy that
+covers the entire preference space. PD-MORL achieves this
+by four major modifications to TD3’s standard actor-criticstructure with respect to the policy loss and preferencespace exploration: i) A preference interpolator I(λ) = λp
+1 Code
+repository:
+https://github.com/HumanoidsBonn/
+demo_enhanced_morl_nav
+
+projects the original preference vectors λ into a normalized
+solution space, thereby improving the aligning of preferences
+with multi-objective value solutions Q. ii) The framework
+is complemented by an angle loss g(λp , Q), designed to
+minimize the directional angle between the interpolated
+preference vectors λp and the multi-objective vector Q, thus
+improving preference-reflection. The actor network is updated
+by maximizing the term λT Q, where λ is the original convex
+preference vector and Q is the critic network’s vector-based
+output, while simultaneously minimizing the directional angle
+term. iii) To efficiently learn across the entire preference space
+in PD-MORL, a hindsight experience replay mechanism [24]
+enhances the preference vector diversity during training.
+iv) The training process involves running a number of Cp
+environments in parallel for N time steps, each tailored to
+explore a distinct segment of the preference-vector space.
+While Basaklar et al. originally evaluated their TD3-based
+PD-MORL on gym benchmarks [16], we extend it to a threeobjective robotic navigation task. The focus of our study is on
+task-related behavior adaptability, robustness, generalization,
+and real-world deployment performance. To the best of our
+knowledge, our study represents the first application of the
+PD-MORL framework to real-world robot tasks, where sensorinduced noise and partial observability introduce additional
+challenges.
+1) State and Action Space: The state space includes the
+local goal, human position, and obstacles detected by a lidar
+sensor. The agent receives the relative 2D goal location pg
+and human position ph in polar coordinates. The 360◦ lidar
+scan, with a range of 4m, is min-pooled from 720 to Nlidar =
+30 rays. These are combined in the state vector as st =
+(pg , ph , Lt ), where Lt = dti |0 ≤ i < Nlidar .
+The robot is controlled with linear and angular velocity
+commands at = (v, ω), where v ∈ [0, 0.5]m s−1 and ω ∈
+[−π, π]rad s−1 . The perception-action loop runs at 5Hz.
+2) Networks: The networks of actor, critic, behavior
+cloning policy, and reward model (see below) are fully
+connected multi-layer perceptron (MLP) networks with an
+identical architecture consisting of 4 layers with 256 neurons
+each. The uniform architecture is a heuristic choice, validated
+in preliminary experiments.
+C. Incorporating Demonstrations
+As one of our main contributions, we distill nuanced
+navigation from demonstration trajectories τ into a reward
+model that natively integrates into MORL as one of the
+objectives and guides the learning agent to demonstrationlike behavior. Through this novel design choice, the influence
+of demonstrations can be modulated by λ post-training.
+A reward model is typically derived from pairwise A≻B
+preference queries in a human feedback process via a
+ranking loss [10]. However, demonstrations are typically
+considered equally important, rendering them unsuitable for
+a ranking-based reward model. Addressing the problem of
+non-existent ranking from demonstration data, we use a
+workaround involving artificial rankings. We employ the
+disturbance-based reward extrapolation (D-REX) approach
+
+Fig. 2: Exploration of D-REX-related demonstration parameters averaged
+over 20 trajectory rollouts, measured against the optimal demonstration
+behavior’s reward. a) The execution of the ϵ-greedy noise-injected behavior
+cloning (BC) policy trained with a demonstration augmentation factor of
+ND = 1,000 reveals a degradation of navigation performance measured by
+the normalized core reward rcore with growing strength of the injected noise.
+b) The demonstration augmentation factor ND indicates how many times
+the optimal human-centric demonstration trajectory (see Sec.III-D.3) was
+rolled out with randomized obstacle placement to form the training dataset,
+showing increased performance with higher ND .
+
+by Brown et al. [25], which imitates pairwise A≻B preference queries by ranking over noise-injected demonstration
+trajectories. First, a behavior cloning (BC) policy πBC is
+trained from ND demonstration trajectories, the collection of
+which is outlined in Sec. III-D.3. Subsequently, the BC policy
+πBC (·|ϵ) is executed with increasing level of ϵ-greedy policy
+noise ϵ ∈ E = (ϵ1 , ϵ2 , . . . , ϵd ) with ϵ1 < ϵ2 < . . . < ϵd . In
+short, low-noise trajectories almost perfectly resemble the
+demonstration trajectory, while they slowly lose their shape
+with growing levels of noise. Trajectory rollouts generated
+with lower noise are automatically ranked superior compared
+to their higher-noise counterparts. Finally, a rich preferenceranking dataset
+Drank = {τi ≺ τj |τi ∼ πBC (·|ϵi ), τj ∼ πBC (·|ϵj ), ϵi > ϵj }
+is obtained. From Drank , we train a reward model R̂(s, a) ∈
+[0, 1] using the Bradley-Terry model [26] with its typical
+implementation
+asPa binary cross entropy loss such that
+P
+R̂
+(s,
+a)
+<
+θ
+s∈τi
+s∈τj R̂θ (s, a) when τi ≺ τj .
+For our ranking dataset Drank , we choose a noise range
+E = (0, . . . , 0.2) and obtain ND = 1,000 demonstration
+augmentations with obstacle randomization from a single
+demonstration pattern.
+D. Reward Vector
+The reward vector covers traditional navigational objectives,
+subsequently referred to as core objectives, and three tuneable
+distinct style objectives based on quantifiable metrics and
+preference demonstrations. In our MORL setup, the core
+objectives are summed and occupy the first entry in the
+reward vector r t which is assigned a static preference weight
+of one. Note that this is neglected in further notations of the
+convex vector λ to focus on the tuneable objectives. For the
+other objectives occupying entries in the reward vector, the
+preference weights are dynamic. The reward vector for our
+MORL framework consists of four components as explained
+below:
+t
+t
+r t = (rcore
+, rt , rt
+, refficiency
+)
+|{z} |demo distance
+{z
+}
+static
+
+dynamic objectives
+
+(1)
+
+1) Navigational Core Objectives: Independent of preferences, the agent must exhibit goal pursuance and collision avoidance. Goal-oriented navigation is achieved by
+t
+a continuous reward rgoal
+= 125 · (dtg − dt−1
+g ), based on
+the change in distance dg = |pg | from the goal. The total
+PT
+t
+cumulative goal reward R = t=0 rgoal
+is non-discounted
+to remain independent of the number of steps to the goal,
+avoiding a bias towards shortest paths and thus the efficiency
+preference objective. Collision avoidance uses a sparse penalty
+t
+rcollision
+= −1,000 for contact between the robot and any
+t
+t
+t
+obstacle. The core reward function is rcore
+= rgoal
++ rcollision
+.
+2) Tuneable Preference Objectives: Our three user-centric
+style objectives cover demonstration-reflection, efficiency, and
+proxemics: To include proxemics, an important comfort factor
+in human-aware navigation, we define a quadratic distance
+penalty for positional closeness dh = |ph | to the human
+within a range dthresh = 2m as
+rdistance = −10
+
+(dh − dthresh )2
+if dh ≤ dthresh ,
+(dthresh − dmin )2
+
+(2)
+
+else zero, with dmin = 0.3m.
+The second style objective is navigational efficiency, or
+shortest path navigation, implemented with a constant time
+t
+penalty refficiency
+= −10.
+The third and last objective is demonstration-like behavior
+t
+rdemo
+, as elaborated below. Note that all rewards of the
+tuneable objectives are defined as penalties with uniform
+range of [−10, 0].
+3) Demonstration Acquisition and Reward: Demonstrations can capture nuanced navigation styles that are difficult to express using analytical reward functions, such
+as characteristically-shaped trajectories when approaching
+the user. In this work, we rely on a predefined optimal
+demonstration pattern, see Fig. 3.A1 (black line), where
+the robot circumnavigates the human in a distinct circular
+manner. After directly approaching the human, at dh = 1m, it
+executes a 90◦ left-hand turn and orbits the human clockwise
+at a radius dh . Once between human and goal, it turns left
+and proceeds directly towards the target. While not being
+user-demonstrations, the distinct pattern enables a clear performance analysis, as its behavior is by design contradictory
+to the other two objectives, efficiency and distance-keeping.
+Specifically, the trajectories are only partially goal-directed,
+t
+conflicting refficiency
+, and traverse close to the human at
+t
+dh = 1m, contradicting rdistance
+with an impact radius of
+2m. Anchored solely around the human and the goal position,
+we can easily augment the single demonstration trajectory by
+rolling it out ND times in randomized obstacle configurations,
+recording only collision-free rollouts. The resulting dataset is
+handed to the D-REX pipeline, as elaborated in Sec. III-C.
+t
+The final reward term is rdemo
+= −10 · (R̂θ (st , at ) − 1).
+IV. E XPERIMENTAL E VALUATION
+Our experimental evaluation is conducted to validate the
+following claims:
+• C1: The D-REX-based reward model successfully captures and teaches the demonstration patterns to the agent.
+
+C2: We learn a preference-adaptable, demonstrationmodulating, yet reliable navigation policy.
+• C3: PD-MORL is crucial to successfully learn our robot
+navigation task.
+• C4: Our policy generalizes from simulation to the real
+world, even on a robot not used for training.
+•
+
+Our evaluation concludes with a sim-to-real transfer and
+evaluation on two robots.
+A. Training and Environment
+We train using the iGibson simulator [27] with a simulated
+Kobuki TurtleBot 2. Robot start and goal positions are
+randomly sampled, 6 to 12m apart in open space. A static
+human is placed between them, aligning with a static-human
+demonstration pattern. Three static rectangular obstacles are
+randomly placed, avoiding occupied positions. The robot must
+navigate to the goal while avoiding both the human and obstacles, which may conflict with the human distance-keeping
+objective. An episode terminates upon successfully reaching
+the goal, robot collision, or a timeout after 300 steps. Training
+is conducted for 600k steps across Cp = 3 environments,
+using γ = 1.0, and the final model is used for evaluation.
+For the evaluation of generalization to dynamic environments
+only, not training, we simulate a moving human approaching
+the robot with an opposite start goal configuration.
+B. Qualitative Navigation Analysis
+Figure 3 shows navigation strategies of our MORL agent
+in static (A+B+E) and dynamic human (C+D) scenarios in
+simulation, under varying preference weights and obstacle
+configurations. Three subplot rows interpolate convex preferences between pairwise combinations of two objectives,
+with the third objective fixed at zero. In Row 1, preferences
+interpolate between distance and efficiency, parameterized by
+µ ∈ [0, 1], with the vector λ1 (µ) = (0, µ, 1 − µ). The other
+rows follow similar pairwise combinations.
+The resulting set
+
+i
+i
+i
+,
+1
+−
+,
+0
+|
+µ
+=
+of λi (µ) is Λi =
+N
+N
+N , i = 0, . . . , N
+with N = 10, forming the test set Λ = Λ1 ∪ Λ2 ∪ Λ3 with a
+total of 33 preference vectors, see Sec. IV-C.
+The plots depict the robot’s trajectories from an initial
+point (black dot) to a goal (blue star), considering static
+obstacles and a human (red circle & arrow), with the optimal
+demonstration trajectory (black line) included.
+Starting with the static human in Fig.3A+B, the shift from
+efficiency to distance-keeping (Fig.3.1) shows increasing
+human distance along the path, with the robot eventually
+passing closely without collision, reducing path length due
+t
+to the efficiency penalty refficiency
+. Under maximum human
+distance preference, the robot occasionally stays close to
+obstacles before turning towards the goal after passing them.
+For the shift from distance-keeping to demonstration-like
+behavior (Fig. 3.2), the minimum distance to the human
+decreases. Supporting C1, trajectories shape into the characteristic demonstration pattern of straight approach, circular
+circumnavigation, and a goal-directed turn, yet sharp corners
+near the human are less pronounced than in the demonstration.
+
+Fig. 3: Trajectory rollouts in simulation for different preference vectors (rows) and different scenes with a static and a dynamic approaching human
+(columns). As can be seen, the navigation policy shifts its behavior according to the set preference. The colorbars on the right indicate the interpolated
+preference space Λi for each plot row. Static scenarios such as (A+B) were covered during training, while a moving human (C+D) and the corridor
+environment (E) test for generalization. While shifting Row 1) from shortest driving behavior under the maximum efficiency preference (yellow) to
+distance-keeping (blue), the minimum distance from the human increases. At the same time, a tendency to navigate alongside obstacles - if present close to
+the path - has developed. Shifting towards the maximum demonstration preference (Row 2), the trajectory shapes increasingly resemble the demonstration
+pattern (black). On the shift back to maximum efficiency (Row 3), the demonstration pattern disappears in favor of shortest trajectories. Comparing the
+static (A+B) vs. moving human (C+D), the demonstration preference reflection becomes less distinct as the agent struggles to follow the static pattern that
+moves with the now dynamic human, yet efficiency and distance preferences keep up with a moving human. In the corridor intersection scene (E), not
+included during training of the policy, the agent successfully accounts for the wall, reducing the possible distance-keeping to the human. The varied angle
+between human and goal from the robot’s perspective does not prevent the policy from first approaching the human under the maximum demonstration
+preference, before continuing towards the goal.
+
+Finally, shifting preferences from demonstration back to
+efficiency (Fig. 3.3), demonstration-driven trajectories bend
+around the human, while efficiency-driven ones head directly
+to the goal after passing. When obstacles are near the human,
+collisions are avoided, though at reduced distance. Under
+maximum distance preference, human distance is maintained
+before and after obstacles, and all trajectories pass the human
+on the right, following the demonstration pattern.
+To further evaluate the generalization and robustness of
+our policy, we test it in a moving human environment and
+a previously unseen scene. In this dynamic setting, which
+was not covered during training, a human approaches at
+0.5m s−1 (Fig. 3.C+D), the efficiency and distance-keeping
+objectives are maintained without collisions. The avoidance
+maneuvers occur more abruptly than in the static case, bending
+sharply away from the human. As expected, the demonstration
+pattern is less followed, with the orbiting part shrinking or
+not completed due to the moving human.
+Similarly, we assess generalization and robustness in an
+unseen corridor intersection scenario (Fig. 3.E). The agent
+successfully accounts for the presence of the wall, which
+limits the possible distance it can maintain from the human.
+Despite the varied angle between the human and the goal from
+the robot’s perspective, the policy prioritizes initial approach
+behavior, aligning with the maximum demonstration preference, before continuing toward the goal. This indicates that
+the learned policy generalizes to unseen spatial configurations
+
+while adhering to key objectives.
+These results provide evidence for C1 and C2, showing
+the robot’s ability to adjust its behavior from human-distant
+to demonstration-driven and efficiency-focused navigation.
+C. Quantitative Analysis
+1) Preference Reflection: We conducted a quantitative
+evaluation of the preference-reflecting agent using multiple
+performance and navigation metrics (Fig. 4). The agent was
+tested across 100 episodes in random environments, using
+different interpolated preference weights λ ∈ Λ (colored
+fractions in Fig.4e; see Sec. IV-B). Statistical significance
+between mean values for the maximum preferences was
+assessed using a Student’s t-test with Bonferroni-correction.
+The agent (OUR) achieved a success rate of 100% with no
+timeouts or collisions (Table I, first column). As the distance
+preference increases, both minimum human distance and
+navigation time rise (Fig. 4a+d), indicating longer trajectories
+to maintain greater human distance.
+To assess how well the demonstration trajectory is reflected (claim C1), we computed the Fréchet distance [28]
+between the demonstration and executed trajectories (Fig. 4b).
+The minimum mean Fréchet distance of 0.41m occurs
+when demonstration preference is maximized. Efficiency and
+distance-keeping preferences also reduce the Fréchet distance,
+as the demonstration path passes close to the human.
+
+in demonstrations. While OUR-RM performs with a similar
+collision rate, its preference-reflection is slightly weaker than
+OUR.
+D. MORL Baseline
+
+Fig. 4: Quantitative metrics of OUR agent for different preference configurations (e), tested for statistical significance for dissimilar means between the
+maximum preferences, with *** for p < .001, and ns for not significant.
+a) The navigation time is smallest for maximized efficiency preference, as
+expected. b) The Fréchet distance to the demonstration trajectory decreases
+as the demonstration preference increases. c) The minimum distance to
+any obstacle is measured using the lidar. d) The minimum distance from
+the human grows with its preference weight. The preference-independent
+non-MORL policy CORE (red dotted line) that only obeys the navigational
+core reward term rcore of collision avoidance and goal pursuance is included
+in each plot.
+
+Comparing the trends of minimum obstacle distance
+(min(dobst ), Fig.4c) and minimum human distance (min(dh ),
+Fig.4d), the agent clearly distinguishes between humans and
+static obstacles. As the human distance preference increases,
+the robot maintains a larger distance from the human, while
+staying close to obstacles, accepting higher collision risk to
+prioritize proxemic preferences.
+Our quantitative analysis supports the findings from the
+qualitative evaluation, providing measurable evidence for
+research claims C1 and C2.
+2) Ablation Study: We ablated the architecture with respect
+to the state space and demonstration reward model, compare
+Table I. The state space changes apply to all involved models:
+D-REX BC policy, D-REX reward model, actor, and critic.
+The ablations cover exclusion of human position (OUR-NH),
+removal of the action at as input to the reward model leaving
+t
+rdemo
+= R̂θ (st ) (OUR-RM), and the combination of both
+(OUR-RM-NH). Note that the maximum preference vectors in
+Table I are λdemo = (1, 0, 0), λdist = (0, 1, 0), λeff = (0, 0, 1),
+respectively.
+Compared to OUR, removing the human position from
+the state space in OUR-NH and OUR-RM-NH reduces
+distance-reflection capabilities. This is expected due to the
+correlation between human position and distance preferences
+
+As single-policy MORL approaches with continuous action
+spaces are scarce due to the novelty of Basaklar’s PD-MORL
+TD3-based algorithm, we implement an equivalent actorcritic-based MORL baseline with parameterized reward (-PR),
+analogous to the baselines in [17]. Specifically, the handling
+of reward and Q value differs: In the baseline, the critic
+predicts a scalar Q corresponding to the parameterized reward
+function Rλ (s, a) = λ⊤ r(s, a), thereby learning a mixed
+representation of all objectives. In contrast, PD-MORL’s critic
+outputs a vector-based Q, with each component corresponding
+to a separate objective, thus maintaining objective-specific
+representations throughout learning. Furthermore, the four
+performance-boosting modifications of PD-MORL are not
+included in the baseline, compare Sec. III-B. The learning
+task characteristics and reward vector remain unchanged.
+During training, convex preference weights are sampled
+at the beginning of each episode. Among the baseline actorcritic implementations, TD3 failed to converge on the task,
+whereas SAC [29] achieved better results. Performance further
+improved when adjusting the discount factor from γ = 1.0 to
+γ = 0.98 in SAC-PR-γ (see Tab. I). Nevertheless, both SACPR and SAC-PR-γ average in success below 55 %. Note that
+SAC-PR and SAC-PR-γ show weaker preference reflection as
+compared to OUR, while SAC-PR failed entirely on the edgecase preferences λdemo = (1, 0, 0) and λeff = (0, 0, 1). The
+results highlight the superiority of PD-MORL for learning
+the robot navigation task, supporting C4.
+1) Non-MORL Core Navigation Agent: To contextualize
+the core navigation objectives, we train and quantitatively
+evaluate a preference-independent, non-MORL policy CORE
+that optimizes only the navigational core rewards rcore (goal
+and collision), compare the red dotted line in Fig. 4. Two
+metrics stand out: The MORL agent prioritizes obstacles
+over humans, while the non-MORL baseline, lacking a
+human-distance reward, treats both similarly. This results in
+comparable minimum values (dh = 0.64m, dobst = 0.72m),
+contrasting with our MORL agent. Its higher demonstration
+Metric
+
+λ
+
+OUR -NH -RM -RM-NH SAC-PR -PR-γ
+
+SR↑ [%]
+CR↓ [%]
+TR↓ [%]
+
+Λ
+Λ
+Λ
+
+100
+0
+0
+
+96.8 100
+2.7
+0
+0.5
+0
+
+79.6
+11.4
+9.0
+
+45.4
+53.2
+1.2
+
+54.5
+44.4
+1.1
+
+min(dh )↑ [m] λdist 1.18 0.52 1.16
+Fréchet↓ [m] λdemo 0.41 0.57 0.46
+Nav. time↓ [s] λeff 17.3 16.9 17.4
+
+0.48
+0.49
+19.2
+
+1.06
+-
+
+0.91
+1.06
+20.8
+
+TABLE I: Quantitative analysis, ablation, and baseline study with respect
+to the state space and reward model, bold number highlighting the
+highest performance. For the ablation identifiers and preference vectors
+{λdist , λdemo , λeff }, please refer to Sec. IV-C.2. For brevity, the identifiers
+are shortened after OUR, so that, e.g., -NH corresponds to OUR-NH with
+the human pose state excluded. The baselines with parameterized rewards
+are denoted with SAC-RP and SAC-PR-γ, short -PR-γ. The results were
+averaged over 100 trajectories for single λ, and for the success rate (SR),
+collision rate (CR), and timeout rate (TR) additionally over all λi ∈ Λ,
+precisely 33 × 100 = 3, 300 trajectories. The baseline SAC-PR had no
+successful trajectories under λdemo and λeff .
+
+Fig. 5: Real-world experiment setup (top) and results (bottom) with the
+policy OUR in a sim-to-real transfer with the Kobuki TurtleBot 2 (left) and
+a the Toyota HSR (right). With a static human as during training (A+B),
+the navigation behavior in the real world successfully reflects varying the
+preferences on both robots. While the TurtleBot exhibits better demonstration
+reflection, the HSR keeps more distance from the human under the maximum
+distance preference. With a dynamic approaching human (C+D) that was
+not accounted for during training, the preference reflection decreases.
+
+Fréchet distance further confirms the absence of demonstration knowledge.
+E. Real-World Transfer
+We evaluated our tuneable policy on a Kobuki TurtleBot
+2 using ROS [30] and transferred the TurtleBot-trained
+policy to a Toyota Human Support Robot (HSR). The agent
+received ground truth human and goal positions, with the
+dynamic human localized via a Vive VR tracker. The HSR’s
+lidar, mounted in the front of its rotation center, may cause
+state space discrepancies for the policy. Due to its 270◦
+coverage, compared to the TurtleBot’s 360◦ lidar, the rear
+distance readings were filled with the maximum range of 4m.
+The procedure ensures state consistency under the conservative assumption that rear obstacles are unlikely to impact
+navigation, as the robot can only move forward. Another
+discrepancy arises in velocity command execution, both in
+sim-to-real transfer and between robots, due to differences in
+
+actuator dynamics and drive mechanisms, potentially affecting
+navigation performance. We ran navigation tests on both
+robots for the preference vectors λ ∈ Λ with N = 5 (see
+Sec. IV-B).
+The recorded TurtleBot trajectories are shown in Fig. 5.A
+and the HSR trajectories in Fig. 5.B. Both robots adapt their
+behavior according to preferences. For the maximum distance
+preference (Fig. 5.A1), the TurtleBot shows oscillations,
+presumable due to slight over-steering, while the HSR drives
+closer to obstacles and exhibits a wider oscillatory motion
+near the goal (Fig. 5.B1). These differences may result from
+lidar state mismatches (e.g., positional offset) or slower
+action execution due to inertia. For maximum demonstration
+reflection, the TurtleBot’s trajectory aligns better with the
+demonstration than the HSR (Fig. 5.2).
+Both robots avoid collisions with dynamically approaching humans (Fig. 5.C+D). As in the dynamic simulations
+experiments (Fig. 3), avoidance sharpens for the demonstration objective but fades as the human and robot pass
+each other. Under the distance preference, sharper inward
+steering and subsequent overshooting behind the human
+in simulation become more pronounced in the real world,
+compare (Fig. 3.C1+D1). We attribute the sharper inward
+steering to the static training environment, which prevented
+the agent from learning in the presence of a moving human.
+Under static conditions, the agent typically maintains a
+fixed distance on the human’s side, forming a distance-angle
+mapping for avoidance. This mapping is disrupted by the
+dynamic human, causing the agent to turn inward as the
+human passes more quickly. Efficiency-focused behavior
+transfers flawlessly. Despite minor sim-to-real differences, all
+real-world trajectories remained collision-free, demonstrating
+robust sim-to-real generalization. See the supplemental video
+for real-world experiments.2 In conclusion, the policy transfers
+smoothly to real robots, supporting research claim C4.
+V. C ONCLUSION
+In summary, we introduced an innovative framework
+fusing multi-objective reinforcement learning (MORL) with
+demonstration-based learning for adaptable, personalized
+robot navigation around a user with changing preferences. Our
+approach successfully modulates the conflicting objectives
+of demonstration data reflection, distance keeping, and
+navigational efficiency without retraining. To achieve this,
+we distill demonstration data into a reward model that
+shapes the agent’s trajectories during navigation with variable
+strength. In various qualitative and quantitative experiments,
+we demonstrated the adaptability to varying preferences and
+scenarios. Finally, we successfully deployed the learned agent
+on two real robots.
+By accepting an externally controlled preference vector,
+the approach enables structured adaptation to changing user
+needs with a clear protocol for preference representation.
+Future research could focus on deriving such vectors from
+human feedback using a dedicated context-aware preference
+prediction agent.
+2 Supplemental video: https://youtu.be/vS22B3HRdL4
+
+R EFERENCES
+[1] P. Vamplew, R. Dazeley, C. Foale, S. Firmin, and J. Mummery, “Humanaligned artificial intelligence is a multiobjective problem,” Ethics and
+Information Technology, vol. 20, no. 1, Mar. 2018.
+[2] J. de Heuvel, N. Corral, L. Bruckschen, and M. Bennewitz, “Learning
+Personalized Human-Aware Robot Navigation Using Virtual Reality
+Demonstrations from a User Study,” in 2022 31th IEEE International
+Conference on Robot Human Interactive Communication (RO-MAN),
+2022.
+[3] C. Mavrogiannis, F. Baldini, A. Wang, D. Zhao, P. Trautman, A. Steinfeld, and J. Oh, “Core Challenges of Social Robot Navigation: A
+Survey,” ACM Transactions on Human-Robot Interaction, vol. 12, Feb.
+2023.
+[4] C. Pérez-D’Arpino, C. Liu, P. Goebel, R. Martı́n-Martı́n, and
+S. Savarese, “Robot Navigation in Constrained Pedestrian Environments
+using Reinforcement Learning,” in 2021 IEEE International Conference
+on Robotics and Automation (ICRA), May 2021.
+[5] J. de Heuvel, N. Corral, B. Kreis, J. Conradi, A. Driemel, and
+M. Bennewitz, “Learning Depth Vision-Based Personalized Robot
+Navigation From Dynamic Demonstrations in Virtual Reality,” in 2023
+IEEE/RSJ International Conference on Intelligent Robots and Systems
+(IROS), Oct. 2023.
+[6] C. F. Hayes, R. Rădulescu, E. Bargiacchi, J. Källström, M. Macfarlane,
+M. Reymond, T. Verstraeten, L. M. Zintgraf, R. Dazeley, F. Heintz,
+E. Howley, A. A. Irissappane, P. Mannion, A. Nowé, G. Ramos,
+M. Restelli, P. Vamplew, and D. M. Roijers, “A practical guide to multiobjective reinforcement learning and planning,” Autonomous Agents
+and Multi-Agent Systems, vol. 36, no. 1, Apr. 2022.
+[7] J. Choi, C. Dance, J.-e. Kim, K.-s. Park, J. Han, J. Seo, and M. Kim,
+“Fast Adaptation of Deep Reinforcement Learning-Based Navigation
+Skills to Human Preference,” in 2020 IEEE International Conference
+on Robotics and Automation (ICRA). IEEE, May 2020.
+[8] L. Keselman, K. Shih, M. Hebert, and A. Steinfeld, “Optimizing
+Algorithms from Pairwise User Preferences,” in 2023 IEEE/RSJ
+International Conference on Intelligent Robots and Systems (IROS),
+Oct. 2023.
+[9] M. Hwang, L. Weihs, C. Park, K. Lee, A. Kembhavi, and K. Ehsani,
+“Promptable Behaviors: Personalizing Multi-Objective Rewards from
+Human Preferences,” in 2024 IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR). IEEE, June 2024.
+[10] D. Marta, S. Holk, C. Pek, J. Tumova, and I. Leite, “Aligning Human
+Preferences with Baseline Objectives in Reinforcement Learning,” in
+2023 IEEE International Conference on Robotics and Automation
+(ICRA), May 2023.
+[11] G. Ferrer and A. Sanfeliu, “Anticipative kinodynamic planning: Multiobjective robot navigation in urban and dynamic environments,”
+Autonomous Robots, vol. 43, no. 6, Aug. 2019.
+[12] S. Kumar and A. Sikander, “A modified probabilistic roadmap algorithm
+for efficient mobile robot path planning,” Engineering Optimization,
+vol. 55, no. 9, Sept. 2023.
+[13] S. B. Banisetty, S. Forer, L. Yliniemi, M. Nicolescu, and D. Feil-Seifer,
+“Socially Aware Navigation: A Non-linear Multi-objective Optimization
+Approach,” ACM Trans. Interact. Intell. Syst., vol. 11, no. 2, July 2021.
+[14] R. Yang, X. Sun, and K. Narasimhan, “A Generalized Algorithm for
+Multi-Objective Reinforcement Learning and Policy Adaptation,” in
+Advances in Neural Information Processing Systems, vol. 32. Curran
+Associates, Inc., 2019.
+[15] T. Basaklar, S. Gumussoy, and U. Y. Ogras, “PD-MORL: PreferenceDriven Multi-Objective Reinforcement Learning Algorithm,” Proceed-
+
+ings of the 11th International Conference on Learning Representations,
+2023.
+[16] J. Xu, Y. Tian, P. Ma, D. Rus, S. Sueda, and W. Matusik, “PredictionGuided Multi-Objective Reinforcement Learning for Continuous Robot
+Control,” in Proceedings of the 37th International Conference on
+Machine Learning. PMLR, Nov. 2020.
+[17] X. He and C. Lv, “Toward personalized decision making for autonomous vehicles: A constrained multi-objective reinforcement learning technique,” Transportation Research Part C: Emerging Technologies, vol. 156, Nov. 2023.
+[18] S. Huang, A. Abdolmaleki, G. Vezzani, P. Brakel, D. J. Mankowitz,
+M. Neunert, S. Bohez, Y. Tassa, N. Heess, M. Riedmiller, and
+R. Hadsell, “A Constrained Multi-Objective Reinforcement Learning
+Framework,” in Proceedings of the 5th Conference on Robot Learning.
+PMLR, Jan. 2022.
+[19] G. Cheng, Y. Wang, L. Dong, W. Cai, and C. Sun, “Multi-objective
+deep reinforcement learning for crowd-aware robot navigation with
+dynamic human preference,” Neural Computing and Applications, June
+2023.
+[20] C.-L. Cheng, C.-C. Hsu, S. Saeedvand, and J.-H. Jo, “Multi-objective
+crowd-aware robot navigation system using deep reinforcement learning,” Applied Soft Computing, vol. 151, Jan. 2024.
+[21] K. Lee, S. Kim, and J. Choi, “Adaptive and explainable deployment of
+navigation skills via hierarchical deep reinforcement learning,” in 2023
+IEEE International Conference on Robotics and Automation (ICRA).
+IEEE, 2023.
+[22] N. Wilde, S. L. Smith, and J. Alonso-Mora, “Scalarizing MultiObjective Robot Planning Problems Using Weighted Maximization,”
+IEEE Robotics and Automation Letters, vol. 9, no. 3, Mar. 2024.
+[23] A. Ballou, X. Alameda-Pineda, and C. Reinke, “Variational meta
+reinforcement learning for social robotics,” Applied Intelligence, vol. 53,
+no. 22, Nov. 2023.
+[24] M. Andrychowicz, F. Wolski, A. Ray, J. Schneider, R. Fong, P. Welinder,
+B. McGrew, J. Tobin, O. Pieter Abbeel, and W. Zaremba, “Hindsight
+Experience Replay,” in Advances in Neural Information Processing
+Systems, vol. 30. Curran Associates, Inc., 2017.
+[25] D. S. Brown, W. Goo, and S. Niekum, “Better-than-Demonstrator
+Imitation Learning via Automatically-Ranked Demonstrations,” in
+Proceedings of the Conference on Robot Learning. PMLR, May
+2020.
+[26] R. A. Bradley and M. E. Terry, “Rank analysis of incomplete block
+designs: I. The method of paired comparisons,” Biometrika, vol. 39,
+no. 3/4, 1952.
+[27] C. Li, F. Xia, R. Martı́n-Martı́n, M. Lingelbach, S. Srivastava, B. Shen,
+K. E. Vainio, C. Gokmen, G. Dharan, T. Jain, A. Kurenkov, K. Liu,
+H. Gweon, J. Wu, L. Fei-Fei, and S. Savarese, “iGibson 2.0: ObjectCentric Simulation for Robot Learning of Everyday Household Tasks,”
+in Proceedings of the 5th Conference on Robot Learning. PMLR,
+Jan. 2022.
+[28] H. Alt and M. Godau, “Computing the fréchet distance between two
+polygonal curves,” International Journal of Computational Geometry
+& Applications, vol. 05, no. 01n02, Mar. 1995.
+[29] T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine, “Soft Actor-Critic:
+Off-Policy Maximum Entropy Deep Reinforcement Learning with a
+Stochastic Actor,” in Proceedings of the 35th International Conference
+on Machine Learning. PMLR, July 2018.
+[30] M. Quigley, K. Conley, B. Gerkey, J. Faust, T. Foote, J. Leibs,
+R. Wheeler, and A. Y. Ng, “ROS: An open-source Robot Operating
+System,” in ICRA Workshop on Open Source Software, vol. 3. Kobe,
+Japan, 2009.
+
+

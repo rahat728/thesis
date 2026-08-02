@@ -1,0 +1,1459 @@
+                                               Properties of secondary components in extensive air shower of cosmic
+                                                                    rays in knee energy region
+                                                                                 Chen Yaling1 , Feng Zhang1 , Hu Liu1,† , Fengrong Zhu1
+                                                           1 School of Physical Science and Technology, Southwest Jiaotong University, Chengdu 610031, Sichuan, China
+
+
+
+                                                   Abstract: The “knee”of cosmic ray spectra reflects the maximum energy accelerated by galactic cosmic ray sources
+arXiv:2307.02068v1 [astro-ph.HE] 5 Jul 2023
+
+
+
+
+                                                   or the limit to the ability of galaxy to bind cosmic rays. The measuring of individual energy spectra is a crucial tool
+                                                   to ascertain the origin of the knee. However, the measuring of energy and the identifying of primary nuclei are the
+                                                   foundation of measuring the energy spectra of individual components. The Extensive Air Shower of cosmic rays in the
+                                                   knee energy region is simulated via CORSIKA software. The energy resolution for different secondary components
+                                                   (include electron, gamma, muon, neutron and Cherenkov light) and primary nuclei identification capability are
+                                                   studied. The energy reconstruction by using electromagnetic particles (electron, gamma and Cherenkov light) in the
+                                                   energy around “knee”is better than by using other secondary particles. The resolution is 10% 19% for proton, and
+                                                   4% 8% for iron. For the case of primary nuclei identification capability, the discriminability of density of muons is
+                                                   best both at low ( 100 TeV) and high ( 10 PeV) energy, the discriminability of the shape of lateral distribution of
+                                                   electron and gamma-rays are good at low energy and the discriminability of density of neutrons is good at high energy.
+                                                   The differences between the lateral distributions of secondary particles simulated by EPOS-LHC and QGSJet-Ⅱ-04
+                                                   hadronic model are studied. For electron, gamma and Cherenkov light, the differences of the number of particles are
+                                                   within 5%; for muon, when the perpendicular distance from the shower axis is greater than 100 m, the difference
+                                                   of the muon number is within 5%; for neutron, the difference in neutron number between the two models is larger
+                                                   than 10%. The results in this work can provide important information for selecting the secondary components and
+                                                   detector type during energy reconstruction and identifying the primary nuclei of cosmic rays in the knee region.
+
+                                                   Keywords: extensive air shower, cosmic rays, composition and phase identification, energy reconstructions
+
+                                              1    Introduction
+                                                   Cosmic ray is a high-energy particle from cosmic space, whose energy spectrum obeys the power law spectrum,
+                                              and the maximum energy reaches about 1021eV .The main feature of its energy spectrum is that at about 1015eV.
+                                              And the Spectral index of the power law spectrum changes from 2.7 to 3.1, which is called the ”knee” region. The
+                                              origin of cosmic ray knee region is an important subject in cosmic ray physics [1] . The “knee”of cosmic ray spectra
+                                              reflects the maximum energy accelerated by galactic cosmic ray sources or the limit to the ability of galaxy to bind
+                                              cosmic rays. Different models predict the different characteristics of the inflection energy (the energy where the
+                                              Spectral index changes) of the single component cosmic ray energy spectrum in the knee region. For example, some
+                                              models predict that the inflection energy is proportional to the charge Z of the original particle [2], and some models
+                                              predict that the inflection energy is proportional to the mass number A of the original particle [3]. The measurement
+                                              of single component energy spectrum of cosmic ray is of great significance to the study of these transformations.
+                                                   At present, cosmic ray can be measured directly or indirectly. Direct measurement is mainly to measure cosmic
+                                              ray through High-altitude balloon and space experiments, such as CREAM [4], AMS [5], DAMPE [6–8], etc. Its
+                                              advantage is that it can directly measure the charge of primary particles, and it has good discrimination ability for
+                                              cosmic ray with different charges. At the same time, it can use the beam of accelerator experiment to calibrate
+                                              the detector, and the absolute energy scale is relatively easy to determine. However, due to load limitations, the
+                                              effective detection area is small, and the upper limit for measuring the energy spectrum can only reach around 100
+                                              TeV [9]. Therefore, the measurement of cosmic ray in the knee area mainly relies on indirect measurements from
+                                              ground-based experiments, such as KASCADE [10], ARGO-YBJ [11], LHAASO [12], ICECUBE [13], TALE [14],
+                                              TUNKA [1] and AS-g [15] . The ground experiment measures the primary cosmic ray by measuring the secondary
+                                              components produced by the cosmic ray in the extensive air shower (EAS). Compared with the direct measurement
+                                              method, it has the advantage of large effective detection area and can measure the energy spectrum of cosmic ray in
+                                              the knee region. However, because the original cosmic ray particles are not directly measured, the ability to identify
+                                              the composition of cosmic ray is not high, and the method of energy reconstruction often depends on the composition
+
+                                                  † Email: huliu@swjtu.edu.cn
+
+
+
+
+                                                                                                               1
+of the original particles and the absolute energy scale is not easy to determine, so for ground experiments, the energy
+measurement and the ability to identify the composition of the original Cosmic ray are the constraints for accurate
+measurement of single component energy spectrum.
+     At present, most experiments only measure one or more of the secondary particles. For example, the detection
+energy band of KASCADE/KASCADE-Grand experiment is about 100 TeV-100 PeV, which can detect the electron,
+muon and hadron components in the secondary particles [10]. The proton, helium nucleus, carbon, silicon and iron
+elements in the ”knee” cosmic ray are identified and measured by the electromagnetic particle number and muon
+number [16, 17]; ARGO-YBJ and LHAASO-WFCTA prototypes detected charged particles and Cherenkov photons
+in secondary particles, and measured the full particle energy spectrum and light component energy spectrum of
+cosmic ray in the energy range of 1 TeV-10 PeV [18]. The measurement energy band of ICETOP/ICECUBE is
+about 250 TeV-1 EeV [19, 20], Aartsen et al[20] used the deep learning technology to reconstruct the energy and
+composition of cosmic ray using Cherenkov photons generated by secondary particles in ice, thus realizing the energy
+spectrum measurement of components. These experiments measure different types of secondary components and the
+measurement results of energy spectra do not match [16–20] . In this paper, we will study the energy reconstruction
+accuracy and particle identification ability of these secondary components, as well as their dependence on the strong
+interaction model. To provide reference for understanding the differences in measurement results between different
+experiments and how to obtain better energy reconstruction accuracy and particle identification ability.
+     The measurement is conducted at the altitude where the longitudinal development of EAS reaches the maximum.
+The fluctuation of secondary particles is smaller, which can obtain better detection performance. Many experiments
+also measure cosmic ray at this altitude. In this paper, the secondary particles and Cherenkov photons of vertically
+incident cosmic ray at 4400 m above sea level will be studied in the knee region. Section 2 introduces the parameter
+settings for simulation, including the selection of detection planes, the parameter settings for secondary particles and
+Cherenkov light; Section 3 studies the horizontal distribution characteristics of secondary components in EAS and
+the differences between different Strong interaction models; Section 4 studies the energy reconstruction accuracy of
+secondary components to the original Cosmic ray; Section 5 studies the component identification ability of secondary
+components to the original Cosmic ray; Section 6 is a summary.
+
+2   EAS simulation
+     In this paper, CORSIKA Version-7.7410 software package [21] is used to simulate the EAS of Cosmic ray in the
+atmosphere. EPOS-LHC and QGSJet - Ⅱ-04 are used as the high-energy strong interaction models, and EPOS-LHC
+Strong interaction model is used specifically. However, these two high-energy Strong interaction models are compared
+(figure 7 and figure 8). The low-energy Strong interaction models use FLUKA, and the electromagnetic interaction
+models use EGS4. The five primary components are proton, helium, CNO, MgAlSi, and iron, respectively. The mass
+number of CNO and MgAlSi are 14 and 27, respectively. The initial particle energy log10 (E/GeV ) is fixed at 5.1,
+5.3, 5.5, 5.7, 5.9, 6.1, 6.5, and 6.9. The zenith angle is fixed at 0 °, and the azimuth angle is evenly projected within
+0 °-360 °. In order to study the effects of non-vertical incidence, this article simulated a case where the zenith
+angle was fixed at 45 °, and compared the results of vertical incidence and zenith angle at 45 °(figure 17), with
+all other results being vertical incidence. The observation plane is selected at an altitude of 4400 meters, and the
+horizontal component and vertical component of the Earth’s magnetic field at the observation plane are 34.618 µT
+and 36.13 µT , respectively.
+     The truncation kinetic energy of secondary particles is set to: hadron 0.1 GeV, muon 0.1 GeV, electron 1 MeV,
+and gamma ray 1 MeV. The selected truncation kinetic energy is lower than the default value in the CORSIKA
+manual to store more secondary particles, and the contribution of secondary particles below the selected truncation
+kinetic energy to the overall transverse distribution is very small. The wavelength of Cherenkov light is set at 200-
+1000 nm. The collection area of Cherenkov photons is a circular area whose vertical distances from the shower axis
+are respectively r=20, 50,100, 150, 200, 300 and 400 m. The radius of the circle is 3 m. In real experiments, the
+atmosphere has absorption and scattering effects on Cherenkov light, including Rayleigh scattering, aerosol scattering
+and ozone absorption. But they depend on specific models, and this article mainly studies the detection performance
+under ideal conditions, so these processes will not be considered in the simulation for the time being.
+
+
+
+
+                                                           2
+3     Lateral distribution of secondaries
+3.1    Type of secondaries
+     The secondary components produced in EAS include Cherenkov photons, positron-electron , gamma rays, muons,
+neutrons, and other particles. Figure 1 shows the types and particle number of secondary components produced by
+Cosmic ray with protons (black) and iron nuclei (red) as their primary particles in the EAS process when energy is
+log10 (E/GeV ) = 5.1. Other primary cosmic rays produce similar secondary components in EAS, which will not be
+described here. Furthermore, in the setting observation plane, the secondary particles in descending order with a large
+number are Cherenkov photons, gamma rays, positron-electron, muon and neutrons. At present, most experiments
+are also conducted to measure these secondary particles, and this paper will only study these secondary components.
+                                Counts
+
+
+
+
+                                                                                                                Proton
+                                         106
+                                                                                                                Iron
+
+                                         105
+
+
+                                         104
+
+
+                                         103
+
+
+                                         102
+
+
+                                         10
+
+
+                                           1        γ   e-             μ-               π-                          K-
+                                               C∨            e+   μ+        n   p            π+   p   n   Ko   K+        πo
+                                                                                                                     Particle
+
+
+      Fig. 1. Type and counts of secondary components in the EAS, the primary particles are proton (black) and iron
+        (red). Energy of the primary particle is log10 (E/GeV )=5.1.
+
+
+
+3.2    Lateral distribution
+     In the EAS process, the vertical distance from the shower axis is recorded as r, and the relationship between
+the secondary particle number density at different locations and the location of r is the horizontal distribution of
+secondary particles. Figure 2(a) and figure 2(b) respectively show the transverse distribution of secondary components
+generated in EAS by Cosmic ray with energy log10 (E/GeV )=5.1, proton and energy log10 (E/GeV )=6.9, and iron
+core. It can be seen that at the same place, the number density of Cerenkov photons are thousands of times the
+number density of gamma ray photons, and the number density of gamma ray photons is 100-1000 times the density
+of neutron particle number with the smallest density. With r=100m and energy log10 (E/GeV ) = 6.9, the primary
+particle takes iron core as an example. Cherenkov photons number density is about 410m´2 , the gamma ray density
+is about 100m−2 , the positron-electron number density is about 10m−2 , the muon number density is about 0.3m−2
+and the neutron number density is about 0.05m−2 .
+     In order to facilitate the viewing of the distribution range of secondary particles in the detection plane, a ring
+is taken with the core as the center and the vertical distance from the core as the radius. The radius of the ring is
+taken and the number of secondary components in the ring is counted, as shown in figure 3. Figure 3(a) and figure
+3(b) respectively show the primary particles with energy log10 (E/GeV ) = 5.1, the primary particles with energy
+log10 (E/GeV )=6.9 composed of protons and the primary particles with iron core. The abscissa is a uniform ring for
+log10 (r). It can be seen that for primary Cosmic ray with different energies and components, the number of secondary
+particle first increases with the vaule of r. When it reaches the maximum, the number of secondary particle start to
+decrease with the vaule of r. Positive and negative electrons are mainly distributed within 10-100 meters; Gamma
+rays and muons are mainly distributed within the range of tens to hundreds of meters from the core site; Neutrons
+are mainly distributed around 1 km away from the core; and Cherenkov photons are mainly distributed near the 100
+meters away from the core.
+     For EAS generated by electromagnetic particles, the Kamata-Greisen (NKG) function is usually used to describe
+
+
+                                                                                    3
+                               106                                                           106
+               Density [m-2]
+
+
+
+
+                                                                             Density [m-2]
+                                     (a)                    Proton                                 (a)                     Proton
+                                                           Cherenkov                                                      Cherenkov
+                                                           Electrons                                                      Electrons
+                                                           Gamma                                                          Gamma
+                               103                         Muon                              103                          Muon
+                                                           Neutron                                                        Neutron
+
+
+
+                                 1                                                             1
+
+
+
+                           10−3                                                          10−3
+
+
+
+                           10−6                                                          10−6
+
+                                 10−1      1   10   102   103                                  10−1      1   10   102   103
+                                                                 r [m]                                                          r [m]
+
+Fig. 2. Lateral distribution of secondary components produced by different primary particles during EAS: (a)
+  Primary particle is proton with energy log10 (E/GeV )=5.1; (b) primary particle is iron with energy log10 (E/GeV )=
+  6.9.
+                 Counts
+
+
+
+
+                                                                               Counts
+
+
+
+
+                                                            Proton                                                           Iron
+                                     (a)                   Cherenkov                         109   (b)                    Cherenkov
+                               107                         Electrons                                                      Electrons
+                                                           Gamma                                                          Gamma
+                                                           Muon                                                           Muon
+                                                           Neutron                           107                          Neutron
+
+
+
+                               104
+
+                                                                                             104
+
+
+
+
+                               10
+                                                                                             10
+
+
+                                 10−1      1   10   102   103                                  10−1      1   10   102   103           104
+                                                                 r [m]                                                          r [m]
+
+Fig. 3. Distribution of the number of secondary components produced by different primary particles during EAS in
+  the detection plane: (a) Primary particle is proton with energy log10 (E/GeV ) = 5.1; (b) primary particle is iron
+  with energy log10 (E/GeV )=6.9.
+
+
+
+
+                                                                         4
+the lateral distribution of its secondary particles, expressed as
+                                                             s−2        s−4.5
+                                                            r            r
+                                       ρ1 (r)=Nsize C(s)             1+
+                                                           RM           RM
+                                                        1       Γ(4.5−s)
+                                              C(s)=       2
+                                                            ×                                                            (1)
+                                                      2πRM    Γ(s)Γ(4.5−2s)
+In the formula, C(s) is a function of s, Γ represents the Gamma function, the vertical distance from the EAS shower
+axis, the particle population density at the location, the total number of secondary particles, the Morrill radius at
+the location of the observation plane, and the age of EAS development[22].
+     For Cosmic ray whose primary particles are protons, helium, oxygen, silicon and iron, different ground experi-
+ments have modified the NKG function to describe the transverse distribution of its secondary particles. For example,
+in the KASCADE experiment, the expression of describing the lateral distribution of secondary particles produced
+by hadrons in EAS is [23]
+                                                            λ−α        λ−β
+                                                            r          r
+                                         ρ2 (r)=Nsize C(λ)          1+
+                                                            r0         r0
+                                                 1         Γ(β−λ)
+                                        C(s)=      2
+                                                     ×                                                                   (2)
+                                                2πr0 Γ(λ−α+2)Γ(α+β−2λ−2)
+In the formula, the parameter represents the age of EAS development, which is a free parameter. But r0 , αand
+βare defined as a constant. For the KASCADE experiment, α= 1.5, β= 3.6 and r0 = 40 meters.
+      This article first attempts to use equation (2) to fit the lateral distribution of different secondary components in
+figure 2. It was found that there can be multiple sets of fitting parameters for the same horizontal distribution, that
+is, there is coupling between the parameters (for example, only two parameters are independent in λ，αand β).
+In order to reduce fitting parameters, this article adopts a more general equation (3) to fit the lateral distribution of
+secondary components:
+                                                            s−2           (s+∆)
+                                                              r            r
+                                          ρ(r)=Nsize C(s)             1+
+                                                             r0           r0
+                                                       1     Γ(−s−∆)
+                                              C(s)=      2
+                                                           ×                                                             (3)
+                                                      2πr0 Γ(s)Γ(−∆−2s)
+In the equation, ∆ is the parameter. When ∆= -4.5 and r0 = RM in equation (3), it is consistent with equation
+(1); When s=λ+0.5, ∆ = -4.1 and r0 = 40 meters , it was consistent with equation (2) . The formula (3) is a
+double power law function. The specific meaning of the parameter is to represent the power law index (or slope) of
+the phase where the Particle number increases with the increase of the value of r in figure 3, which is equivalent to
+the age parameter in Formula (1). 2s+ ∆ represents the power law index (or slope) of the phase where the Particle
+number decreases with the increase of the value of r in figure 3, and r0 represents the coordinates of r where the two
+different power law indexes change.
+      There are four free parameters in the formula (3) that are Nsize , s, ∆, r0 . And the value of these fitting parameters
+are not unique. The same horizontal distribution can be fitted by combining multiple groups of parameters. Multiple
+parameter combinations can be used to fit the same lateral distribution. In order to further reduce the number of free
+parameters, the correlation between these parameters was studied. For the energy segment simulated in this paper
+and the original cosmic ray component, when the secondary particle is gamma ray and r0 = 460m, the horizontal
+distribution of these cases can be fitted. And the correlation between sγ and ∆γ is shown in figure 4(a) and the
+                                          γ
+fitting expression is Formula (4). So Nsize  ,se will only be used as free parameters. Correspondingly, for the electrons
+                                     e                                                                              e
+in the secondary particles, when r0 =50m, fitting se and ∆e satisfy equation (5), as shown in figure 4(b) Nsize        and se
+                                                                                            µ
+will only be used as free parameters. For the muon in the secondary particle, fixed r0 =800m, the sµ and ∆µ satisfy
+                      µ
+equation (6) and Nsize   ,sµ will only be used as free parameters.
+                                               ∆γ =−1.18·s2γ +1.94·sγ −5.00                                              (4)
+                                               ∆e =−0.35·s2e −0.27·se −3.20                                              (5)
+                                                       ∆µ =−sµ −4.4                                                      (6)
+
+
+
+
+                                                             5
+                                    0                                                                                                       −1
+
+
+                  Δγ
+                                            (a)                                                   Proton                                            (b)                                                 Proton
+
+
+
+
+                                                                                                                           Δe
+                                   −1                                                             Iron                                                                                                  Iron
+                                                                                                                                            −2
+                                   −2
+                                                                                                                                            −3
+                                   −3
+
+                                   −4                                                                                                       −4
+
+
+                                   −5                                                                                                       −5
+
+                                   −6
+                                                                                                                                            −6
+                                   −7
+                                                                                                                                            −7
+                                   −8
+
+                                   −9                                                                                                       −8
+                                     0       0.2   0.4     0.6   0.8       1   1.2    1.4   1.6      1.8         2                            0           0.5       1   1.5        2    2.5   3         3.5      4
+                                                                                                            sγ                                                                                                  se
+    Fig. 4. Dependence between parameters s and ∆ in gamma (a) and electron (b) lateral distribution fitting (Shower
+      is induced by proton and iron respectively, and the blue dotted line is the fitting curve).
+
+
+     For neutrons in secondary particles, due to the small number of secondary particles, the limit on the transverse
+distribution function is weaker. And the range of variation for each parameter is larger. According to equation (3) in
+reference [24], certain parameters of equation (3) in this paper were fixed and optimized based on this. It was found
+                                                                                                     n
+that equation (7) can fit the transverse distribution of neutrons well,where the free parameter is Nsize and r0n .
+                                                         −0.9          −4.0
+                                                  n        r            r
+                                         ρn (r)=Nsize Cn n         1+ n
+                                                          r0           r0
+                                                                                                        1       Γ(4.0)
+                                                                                        Cn =              n 2
+                                                                                                              ×                                                                                                        (7)
+                                                                                                     2π(r0 ) Γ(1.1)Γ(2.9)
+
+
+                                   106                                                                                                     107
+                   Density [m-2]
+
+
+
+
+                                                                                                                           Density [m-2]
+
+
+
+
+                                         (a)                                                      Cherenkov
+                                                                                                                                                  (b)
+                                                                                                                                                                                                    Cherenkov
+                                                                                                  Electrons                                                                                         Electrons
+                                                                                                  Gamma                                                                                             Gamma
+                                                                                                  Muon                                                                                              Muon
+                                   103
+                                                                                                  Neutron                                                                                           Neutron
+                                                                                                                                           103
+
+
+                                     1
+
+                                                                                                                                           10−1
+
+                                    −3
+                               10
+
+
+                                                                                                                                       10−5
+                               10−6
+
+                                     10−1              1              10        102          103                                             10−1               1             10       102        103            104
+                                                                                                            r [m]                                                                                             r [m]
+
+
+
+                                   106                                                                                                     107
+                   Density [m-2]
+
+
+
+
+                                                                                                                           Density [m-2]
+
+
+
+
+                                         (c)                                                      Cherenkov
+                                                                                                                                                  (d)
+                                                                                                                                                                                                    Cherenkov
+                                                                                                  Electrons                                                                                         Electrons
+                                                                                                  Gamma                                                                                             Gamma
+                                     3                                                            Muon                                                                                              Muon
+                                   10
+                                                                                                  Neutron                                    3                                                      Neutron
+                                                                                                                                           10
+
+
+                                     1
+
+                                                                                                                                           10−1
+
+                               10−3
+
+
+                                                                                                                                       10−5
+                               10−6
+
+                                                   1             10            102          103                  104                         10−1               1             10       102        103            104
+                                                                                                            r [m]                                                                                             r [m]
+
+    Fig. 5. Fitting of lateral distribution of secondary components: (a), (b) Primary particle is proton with
+      log10 (E/GeV ) = 5.1(a)and log10 (E/GeV ) = 6.9 (b); (c),(d) primary particle is iron with log10 (E/GeV ) = 5.1
+      (c) and log10 (E/GeV ) = 6.9 (d). The green, black, blue, and pink points represent gamma, electron, muon, and
+      neutron respectively, the red stars at the top represent Cherenkov light. The solid lines with the same color are
+      the fitted function.
+
+
+     Equations (3) and (7) are used to fit the transverse distribution of secondary particles produced by cosmic rays
+of different components in EAS, as shown in figure 5. Because only a few Cherenkov photons are preserved in the
+simulation, the transverse distribution of Cherenkov photons is not fitted.
+
+
+                                                                                                                       6
+     To test the fit quality of the transverse distribution of different secondary components, the deviation between
+the fit values “Nsize“and the statistical values “N”of the number of secondary particles produced by cosmic
+                                                                −Nsize
+rays of different components and energies in EAS ( Diff = N N     size
+                                                                       ×100%) is shown in figure 6. When the energy
+log10 (E/GeV )>5.5, the deviation of all particles is within 6%, and then the fluctuation will be used to characterize
+the accuracy of the energy reconstruction.
+
+
+                                                       30                                                                                                   30
+                      Diff [%]
+
+
+
+
+                                                                                                                                                Diff [%]
+                                                                                        Protron_Zenith=0
+                                                                                                           o                                                                                                  o
+                                                             (a)                                                                                                      (b)                        Iron_Zenith=0
+                                                                                               Electron
+                                                       20                                                                                                   20                                      Electron
+                                                                                               Gamma                                                                                                Gamma
+                                                                                               Neutron                                                                                              Neutron
+                                                       10                                      Muon                                                         10                                      Muon
+
+
+                                                        0                                                                                                       0
+
+
+                                                      − 10                                                                                                 −10
+
+
+
+                                                      − 20                                                                                                 −20
+
+
+
+                                                      − 30                                                                                                 −30
+                                                             5     5.5        6          6.5                7                                                        5      5.5        6         6.5              7
+                                                                                               log10(E/GeV)                                                                                            log (E/GeV)
+                                                                                                                                                                                                         10
+
+
+      Fig. 6. Deviation between counted value N and fitted value Nsize for different secondary particles. Shower is induced
+        by proton (a) and iron (b).
+
+
+
+3.3    Differences between hadronic models
+      The difference in current intensity of proton spectra in the knee region measured by different strong interaction
+models in KASCADE experiments is nearly double [10]. In this paper, the two strong interaction models’s difference
+of transverse distribution between EPOS-LHC and QGSJet-Ⅱ-04 is studied, and the results are shown in figure 7
+and figure 8. It can be seen that the difference in the number of positrons, gamma rays and Cerenkov photons
+in the two models is close and minimal. When r>20m, the difference of the models of the above three particles
+is within 5% and all range differences of r are within 10%; when r>100m, the difference of Muon’s model is less
+than 5%, but when r<100m, the maximum difference can be close to 20% (corresponding to the original particle is
+iron, with an energy of about 10 PeV, around r= 5 m); Neutrons differ the most, with a difference of 10%-20% at
+r>100m and a maximum difference is about 40% when r<100m (corresponding to r<100m). In general, the difference
+between muons and neutrons is significantly reduced when r>100m. For experiments measuring muse and neutrons,
+it is recommended that the detector size is greater than 100 m and should select particles greater than 100 m for
+reconstruction to reduce model dependence. Muons and neutrons are the products of the strong interaction process.
+The EPOS-LHC model takes into account the influence not considered in other strong interaction models. Under
+the multiple scattering of EPOS-LHC, the energy scale of a single scattering is taken into account when calculating
+the respective cross sections. This is not the case in the QGSJET-II-04 model based on Gribov-Regge theory [25]
+.The differences between different strong interaction models have been studied in detail in literature [25–27] and will
+not be discussed in this paper.
+
+                                                       40                                                                                                 40
+                                                                                                                          (QGSJet04-EPOS)/EPOS*100 [%]
+                       (QGSJet04-EPOS)/EPOS*100 [%]
+
+
+
+
+                                                                                       Proton log (E/GeV)=5.1
+                                                             (a)                                 10
+                                                                                            Electron                                                                (b)
+                                                       30                                                                                                 30
+                                                                                            Gamma
+                                                       20                                   Muon                                                          20
+                                                                                            Neutron
+                                                       10                                   Cherenkov                                                     10
+
+                                                        0                                                                                                  0
+
+                                                      − 10                                                                                               − 10
+
+                                                      − 20                                                                                               − 20
+
+                                                      − 30                                                                                               − 30                                Proton log (E/GeV)=6.9
+                                                                                                                                                                                                       10
+                                                                                                                                                                                                  Electron
+                                                      − 40                                                                                               − 40                                     Gamma
+                                                                                                                                                                                                  Muon
+                                                      − 50                                                                                               − 50                                     Neutron
+                                                                                                                                                                                                  Cherenkov
+                                                      − 60                                                                                               − 60
+                                                                                                                  3
+                                                         1               10        2
+                                                                                  10                            10                                          1                     10       102                    103
+                                                                                                          r [m]                                                                                                r [m]
+
+      Fig. 7. Difference in percentage of the lateral distribution of secondary particles between EPOS-LHC and QGSJet-
+        Ⅱ-04 hadronic interaction model, in which the primary particles are protons with different energies: (a)
+        log10 (E/GeV )=5.1; (b) log10 (E/GeV )=6.9.
+
+
+
+                                                                                                                      7
+                                                    40                                                                                  40
+
+
+
+
+                    (QGSJet04-EPOS)/EPOS*100 [%]
+
+
+
+
+                                                                                                        (QGSJet04-EPOS)/EPOS*100 [%]
+                                                                       Iron log (E/GeV)=5.1                                                                Iron log (E/GeV)=6.9
+                                                          (a)                  10
+                                                                              Electron                                                        (b)                  10
+                                                                                                                                                                  Electron
+                                                    30                                                                                  30
+                                                                              Gamma                                                                               Gamma
+                                                    20                        Muon                                                      20                        Muon
+                                                                              Neutron                                                                             Neutron
+                                                    10                        Cherenkov                                                 10                        Cherenkov
+
+                                                     0                                                                                   0
+
+                                                   − 10                                                                                − 10
+
+                                                   − 20                                                                                − 20
+
+                                                   − 30                                                                                − 30
+
+                                                   − 40                                                                                − 40
+
+                                                   − 50                                                                                − 50
+
+                                                   − 60                                                                                − 60
+                                                      1         10   102                      103                                         1         10   102                      103
+                                                                                        r [m]                                                                               r [m]
+
+    Fig. 8. Difference in percentage of the lateral distribution of secondary particles between EPOS-LHC and QGSJet-Ⅱ-
+      04 hadronic interaction model, in which the primary particles are irons with different energies: (a) log10 (E/GeV )=
+      5.1; (b) log10 (E/GeV )=6.9.
+
+
+
+
+4   Energy resolution
+     By fitting the transverse distribution of the secondary particles produced by cosmic ray EAS, the fitting param-
+eters of each secondary particle can be obtained. The number of particles or the number density of particles at a
+certain radius is often used for energy reconstruction, while the ratio of the number of different secondary particles
+and the shape parameters of the transverse distribution are often used to identify the composition of the original
+particle. In this paper, we will use the Cherenkov photon numbers of the four secondary particles fitted and statis-
+tically obtained at a different “r”in Section 3 to characterize the energy reconstruction accuracy and compare the
+differences between them. This paper only studies the accuracy of energy reconstruction under fixed components and
+does not study the component dependence of energy reconstruction and the construction of composition-independent
+energy reconstruction variables by combining real observation data with composition-sensitive variables, which is
+beyond the scope of this paper. The results obtained in this paper are superior to those obtained after taking into
+account the composition correction, so it can be considered as the upper limit of energy reconstruction using a single
+secondary particle.
+     Since the energy of the primary particle is proportional to the number or density of secondary particles,
+                                                                                         E =C×Nsize                                                                                     (8)
+So the percentage spread of the number of secondary particles or the number density (defined as the spread of the
+number or number density distribution divided by the mean of the distribution) is equal to the resolution of the
+reconstructed energy
+                                             ∆E ∆(C×Nsize ) ∆Nsize
+                                                  =               =                                                    (9)
+                                              E       C×Nsize         Nsize
+Because the simulation process is carried out at several discrete fixed energies, the influence of the width of the energy
+range on the broadening of the particle population distribution is not involved. Therefore, this paper will directly use
+the percentage of the distribution broadening of particle number or particle number density to characterize the energy
+reconstruction accuracy, without carrying out specific energy reconstruction, and the calculation of the broadening
+will use the value of σ fitted by Gaussian function.
+     At present, the most commonly used energy reconstruction method is to reconstruct the energy with the sec-
+ondary particle number density “ρ”(electron number density ”ρe ”, gamma ray number density ”ργ ”, muon number
+density ”ρµ ”, neutron number density ”ρn ”) of a certain solid “r”at a given point [28]. Figure 9 shows the varia-
+tion curve of the expansion percentage of secondary electron density ”ρe ”produced by primary particles of different
+energies with the position “r”when the primary component is iron. And the lines of different colors represent the
+different energies of primary particles. It can be seen that for the number density of electrons in the secondary
+particles, the broadening percentage is smaller in the range of 100-500 m, and it is less dependent on the composition
+and energy of the primary particles. Other secondary particles have similar properties, which will not be detailed.
+Gamma ray at 300-800 m range is better, Muon at 150-600 m range is better and neutron at 800-2000 m range is
+better.The percentage spread of electron number density at 200 m, gamma ray density at 500 m, Muon density at
+250 m, and neutron density at 1000 m will be used to characterize the accuracy of energy reconstruction using them
+(Figure 11).
+
+
+                                                                                                    8
+                                           50
+
+
+
+
+                               Sigma [%]
+                                                                      Iron
+                                           45                   log10 (E/GeV)=5.1
+                                           40
+                                                                log10 (E/GeV)=5.3
+                                                                log10 (E/GeV)=5.5
+                                           35                   log10 (E/GeV)=5.7
+                                                                log10 (E/GeV)=5.9
+                                           30
+                                                                log (E/GeV)=6.1
+                                                                   10
+                                           25                   log10 (E/GeV)=6.5
+                                                                log (E/GeV)=6.9
+                                           20                     10
+
+                                           15
+
+                                           10
+
+                                            5
+
+                                            0                                        3
+                                                1   10          102             10
+                                                                                         r [m]
+    Fig. 9. Resolution in percentage (sigma/mean) of the particle number density of secondary electrons varies with
+      perpendicular distance to the shower axis. The secondary electrons are induced by iron with different energies.
+
+
+      Another way to reduce the broadening of the particle population distribution is to use the age parameter “s”to
+modify the particle population [29]. Since the number of secondary particles in the observation plane is affected by
+the development stage of EAS, and the age parameter “s”represents the development stage of EAS, the influence of
+the development stage of EAS can be reduced by modifying the age parameter. Figure 10(a) shows the distribution of
+fitting parameters of secondary electrons “Nsize ”with “se ”when the original particle energy log10 (E/GeV )=5.1
+                                            e
+and the composition is iron, which ln(Nsize   ) decreases as se increases. The red solid line is the straight line fitting.
+                                                                        e
+The broadening that can be effectively reduced is recorded as”ln(Nsize     2 )”at the mean corrected to by the red solid
+line. The red and blue curves in figure 10(b) represent the distribution before and after correction respectively and are
+fitted with Gaussian functions. The modified broadening of “ln(Nsize    e
+                                                                          )”is significantly smaller, which can be used
+to characterize the energy reconstruction accuracy of this method and the results are shown in figure 11. Figure 11
+shows the comparison of the energy reconstruction accuracy before and after age correction “Nsize ”“Nsize 2 ”and
+the secondary particle population density for energy reconstruction when the primary particle was iron, as well as
+the relationship between the energy reconstruction accuracy and the primary particle energy. It can be seen that for
+electrons and gamma rays in secondary particles, the energy reconstruction accuracy can be effectively improved by
+using the particle number and particle number density modified by age parameter compared with the direct use of
+particle number, and the energy reconstruction accuracy of the particle number modified by age parameter is slightly
+better than that obtained by particle number density. But the difference is not large. For muons and neutrons in
+secondary particles, there is little difference in the energy reconstruction accuracy of the particle number, particle
+density and particle number modified by age parameter. Since the modified curve of the age parameter depends on
+the energy and type of the original particle, and the radius selected for the particle number density is a fixed value,
+and the energy reconstruction accuracy obtained between them is not very different, the particle number density
+of the secondary particle at a fixed point will be used to characterize the optimal energy reconstruction accuracy.
+The results here are similar for the energy reconstruction accuracy of the EPOS-LHC model and the QGSJet-Ⅱ-04
+model. In this paper, the limit detection performance under ideal conditions is studied and the process of detector
+response is not involved. The systematic error of energy reconstruction caused by the difference of the mean particle
+numbers of the two strong interaction models is not considered here.
+      Figure 12 shows the percentage broadening of the distribution of Cherenkov photon numbers (N C ) at different
+vertical distances from the core site when the primary particle is iron, and the vertical distances from the center to
+the shower axis are 20, 50, 100, 150, 200, 300 and 400 m, respectively. The number of Cherenkov photons at visible
+of 50m, 150m and 200 m has a smaller spread of about 4%-7%.
+      The energy reconstruction accuracy obtained by different secondary components is shown in figure 13, where
+the primary particles in Figure 13(a) - (e) correspond to proton, helium, carbon, nitrogen, oxygen, magnesium,
+aluminum, silicon and iron, respectively. For protons, the energy reconstruction accuracy of electrons, gamma rays
+and Cerenkov photons at 50 m is about 10%-19%. For iron, the energy reconstruction accuracy of gamma rays,
+Cherenkov photons and muons at 150 m is better and is about 4%-8%. The higher the mass number of the primary
+particle, the higher the precision of energy reconstruction. In the experiment, multiple secondary particles can be
+combined according to the accuracy of individual energy reconstruction of different secondary particles to obtain
+
+
+                                                            9
+                                  11.5
+
+
+
+
+                                                                                                                                              Counts
+                 ln(N esize )
+
+
+
+
+                                            (a)                                                                                                              (b)
+
+                                    11
+                                                                                                                                                  102
+                                                                                                                                                                                h1
+                                                                                                                                                                       Entries       5000
+                                                                                                                                                                       Mean         10.24
+                                  10.5                                                                                                                                 χ2 / ndf 25.02 / 33
+
+                                                                                                                                                                                h2
+                                                                                                                                                                       Entries      5000
+                                                                                                                                                   10                  Mean        10.24
+                                   10
+                                                                                                                                                                       χ2 / ndf 46.6 / 44
+
+
+                                   9.5
+
+                                                                                                                                                       1
+
+                                     9
+                                      1.4         1.5         1.6         1.7    1.8    1.9         2         2.1     2.2                               8              8.5            9            9.5       10      10.5         11     11.5
+                                                                                                                                                                                                                                      e
+                                                                                                                      Se                                                                                                          ln(Nsize)
+                               e
+Fig. 10. Distribution of ln(Nsize  ) vs. se from fitted lateral distribution function for iron with energy log10 (E/GeV )=
+                                                                                                         e             e
+  5.1 (Red solid line is a linear fitting); (b) comparison between corrected and uncorrected ln(Nsize       ), and ln(Nsize )
+  corrected with the red solid line in panel (a) (In the panel (b), χ2 /ndf can represent the good or bad fit, χ2
+  represents the difference between the model and the data point, ndf refers to the degree of freedom of fitting, that
+  is the number of data points minus the number of free parameters of the model).
+
+
+
+
+                                   20                                                                                                           20
+                 Resolution [%]
+
+
+
+
+                                                                                                                             Resolution [%]
+
+
+
+
+                                         (a)                                                            Electron                                           (b)                                                           Gamma
+                                   18                                                                                                           18
+                                                                                                          e                                                                                                               p
+                                   16                                                                    Nsize                                  16                                                                       Nsize
+                                   14                                                                    ρe                                     14                                                                       ρp
+                                                                                                          e                                                                                                               p
+                                   12                                                                    Nsize 2                                12                                                                       Nsize 2
+                                   10                                                                                                           10
+
+                                    8                                                                                                             8
+
+                                    6                                                                                                             6
+
+                                    4                                                                                                             4
+
+                                    2                                                                                                             2
+
+                                    0                                                                                                             0
+                                     5         5.2      5.4         5.6    5.8    6    6.2    6.4       6.6     6.8     7                          5             5.2      5.4        5.6     5.8         6   6.2   6.4      6.6   6.8   7
+                                                                                                        log10(E/GeV)                                                                                                        log10(E/GeV)
+
+
+
+                                   20                                                                                                           20
+                 Resolution [%]
+
+
+
+
+                                                                                                                             Resolution [%]
+
+
+
+
+                                         (c)                                                            Muon                                               (d)                                                           Neutron
+                                   18                                                                                                           18
+                                                                                                         u
+                                   16                                                                   Nsize                                   16                                                                       Nnsize
+                                   14                                                                   ρu                                      14                                                                       ρn
+                                                                                                         u
+                                   12                                                                   Nsize 2                                 12                                                                       Nnsize 2
+                                   10                                                                                                           10
+
+                                    8                                                                                                             8
+
+                                    6                                                                                                             6
+
+                                    4                                                                                                             4
+
+                                    2                                                                                                             2
+
+                                    0                                                                                                             0
+                                     5         5.2      5.4         5.6    5.8    6    6.2    6.4       6.6     6.8     7                          5             5.2      5.4        5.6     5.8         6   6.2   6.4      6.6   6.8   7
+                                                                                                        log10(E/GeV)                                                                                                        log10(E/GeV)
+
+Fig. 11. Energy resolution reconstructed by , and respectively. Shower is induced by iron. The secondary particles
+  are electron (a), gamma (b), muon (c) and neutron (d), respectively;Nsize indicates the amended Nsize .
+
+
+
+
+                                                                                                                            10
+                                                                                                                    25
+
+
+
+
+                                                                                        Sigma [%]
+                                                                                                                                                                                                                                                                  Iron
+                                                                                                                                                                                                                                                              Cherenkov.r=20
+                                                                                                                    20                                                                                                                                        Cherenkov.r=50
+                                                                                                                                                                                                                                                              Cherenkov.r=100
+                                                                                                                                                                                                                                                              Cherenkov.r=150
+                                                                                                                    15                                                                                                                                        Cherenkov.r=200
+                                                                                                                                                                                                                                                              Cherenkov.r=300
+                                                                                                                                                                                                                                                              Cherenkov.r=400
+                                                                                                                    10
+
+
+
+
+                                                                                                                     5
+
+
+
+
+                                                                                                                     0
+                                                                                                                      5               5.2         5.4                          5.6                 5.8          6                            6.2                  6.4             6.6          6.8             7
+                                                                                                                                                                                                                                                                                  log (E/GeV)
+                                                                                                                                                                                                                                                                                        10
+
+    Fig. 12.  Resolution in percentage (sigma/mean) of Cheren kov photon number N C varies with the energy of the
+      primary particle at different vertical distance r from the core site. Shower is induced by iron.
+
+
+energy reconstruction variables with less component dependence and higher precision. The above results can provide
+references for the selection of secondary particle types, energy reconstruction methods and distance from the core.
+
+                     60                                                                                        60                                                                                                                     30                                                                                            30
+    Resolution [%]
+
+
+
+
+                                                                                              Resolution [%]
+
+
+
+
+                                                                                                                                                                                                                    Resolution [%]
+
+
+
+
+                                                                                                                                                                                                                                                                                                                   Resolution [%]
+                          (a)                         Proton                                                        (b)                         Helium                                                                                      (c)                                  CNO                                                     (d)                         MgAlSi
+                                                   Electron                                                                                  Electron                                                                                                                        Electron                                                                             Electron
+                     50                            Gamma                                                       50                            Gamma                                                                                    25                                     Gamma                                                  25                            Gamma
+                                                   Muon                                                                                      Muon                                                                                                                            Muon                                                                                 Muon
+                     40                            Neutron                                                     40                            Neutron                                                                                  20                                     Neutron                                                20                            Neutron
+                                                   Cherenkov.r=50                                                                            Cherenkov.r=50                                                                                                                  Cherenkov.r=50                                                                       Cherenkov.r=50
+                                                   Cherenkov.r=150                                                                           Cherenkov.r=150                                                                                                                 Cherenkov.r=150                                                                      Cherenkov.r=150
+                     30                                                                                        30                                                                                                                     15                                                                                            15
+
+
+                     20                                                                                        20                                                                                                                     10                                                                                            10
+
+
+                     10                                                                                        10                                                                                                                      5                                                                                            5
+
+
+                     0                                                                                         0                                                                                                                       0                                                                                            0
+                      5         5.2   5.4   5.6   5.8   6   6.2   6.4   6.6   6.8   7                           5         5.2   5.4   5.6   5.8   6      6.2                  6.4     6.6    6.8      7                                 5         5.2     5.4     5.6       5.8   6   6.2    6.4   6.6   6.8   7                     5         5.2   5.4   5.6   5.8   6   6.2   6.4   6.6   6.8   7
+                                                                        log10(E/GeV)                                                                                                  log10(E/GeV)                                                                                                 log10(E/GeV)                                                                        log10(E/GeV)
+
+
+
+
+                                                                                                                                                                         30
+                                                                                                                                                        Resolution [%]
+
+
+
+
+                                                                                                                                                                               (e)                             Iron
+                                                                                                                                                                                                           Electron
+                                                                                                                                                                         25                                Gamma
+                                                                                                                                                                                                           Muon
+                                                                                                                                                                         20                                Neutron
+                                                                                                                                                                                                           Cherenkov.r=50
+                                                                                                                                                                                                           Cherenkov.r=150
+                                                                                                                                                                         15
+
+
+                                                                                                                                                                         10
+
+
+                                                                                                                                                                         5
+
+
+                                                                                                                                                                         0
+                                                                                                                                                                          5          5.2    5.4     5.6   5.8   6                    6.2    6.4         6.6     6.8     7
+                                                                                                                                                                                                                                                        log10(E/GeV)
+
+
+    Fig. 13. Energy resolution from different secondary components vs. primary particle energy. The primary particles
+      are proton (a), helium (b), CNO (c), MgAlSi (d), iron (d) (Colored lines indicate different secondary type)
+
+
+
+
+5         Composition discrimination
+     The identification of the primary particles of cosmic rays is the key to the single component energy spectrum
+measurement of cosmic rays. The study on the primary particle sensitivity of secondary components in EAS can
+provide guidance for the selection of component identification variables. In this paper, the ability of these parameters
+to identify primary particles is studied according to the fitting parameters of the transverse distribution of secondary
+particles obtained in Section 3. Since Cherenkov light is mainly used to identify primary particles based on imaging, it
+is beyond the scope of this study and will not be studied. According to the study in Section 4, it can be seen that the
+particle number density fluctuates less than the total number of particles, and it will also have better discrimination
+ability for component identification. Here, the particle number density will be used instead of the total number of
+particles to study the particle discrimination ability.
+     This paper will study the component identification ability of each variable under the same energy condition, which
+can show the independent identification ability of each variable. For real experimental data, energy reconstruction
+variables can be combined with energy-independent component identification variables. For example, the number of
+electromagnetic particles and the number of muse of secondary particles are related to the energy and type of the
+
+
+                                                                                                                                                                                                            11
+original particle. The fluctuation of electromagnetic particles is smaller and the number of muon is more sensitive
+to the composition. So it can be modified on the basis of electromagnetic particles and the number of muon can be
+used to obtain the energy reconstruction variable independent of the composition. It is modified using the previous
+energy reconstruction variable to obtain an energy-independent component sensitive variable. For reasons of space,
+I will not go into details here.
+     Figure 14 shows the ability of particle number density and age parameters to distinguish protons and iron nuclei
+when the secondary particles are positrons, gamma rays, muons and neutrons respectively. The dots of different
+colors in Figure 14 represent protons and iron nuclei with energy log10 (E/GeV ) = 5.1, log10 (E/GeV ) = 6.1 and
+log10 (E/GeV ) = 6.9, respectively. It can be seen that the age parameters “s”of positrons and gamma-rays, the
+particle number density of muons and neutrons have a good ability to identify the composition. In order to more
+vividly demonstrate their particle identification ability, the distributions of protons and iron nuclei at the same energy
+are projected onto the coordinate axes of the above variables, respectively, as shown in figure 15 and figure 16. It can
+be seen that the identification energy of muon particle number density is the best in both low energy and high energy
+segments. The age parameter “se ””sΓ ”of positron and gamma ray transverse distribution shape is better in low
+energy segment (such as around 100 TeV) and the identification ability of neutron particle number density is better
+in high energy segment (such as around 10 PeV). In the experiment, several secondary particles can be combined to
+obtain the component identification variable with less energy dependence and better identification ability according
+to the identification ability of different secondary particles. This can provide reference for the selection of component
+identification variables and detector types at different energies.
+                                                                       Electron                                                                                Gamma
+                                          10                                                                                      10
+                               ρe [m-2]
+
+
+
+
+                                                                                                                       ργ [m-2]
+
+
+
+
+                                               (a)                                      log (E/GeV)=6.9 Proton
+                                                                                          10                                                 (b)                             log10(E/GeV)=6.9 Proton
+                                                                                        log (E/GeV)=6.1 Proton
+                                                                                          10
+                                                                                                                                                                             log10(E/GeV)=6.1 Proton
+                                           1                                            log (E/GeV)=5.1 Proton
+                                                                                          10
+                                                                                                                                   1                                         log10(E/GeV)=5.1 Proton
+                                                                                        log (E/GeV)=6.9 Iron
+                                                                                          10
+                                                                                                                                                                             log10(E/GeV)=6.9 Iron
+                                                                                        log (E/GeV)=6.1 Iron                                                                 log10(E/GeV)=6.1 Iron
+                                    10−1                                                                                     10−1
+                                                                                          10
+
+                                                                                        log (E/GeV)=5.1 Iron
+                                                                                          10
+                                                                                                                                                                             log10(E/GeV)=5.1 Iron
+
+
+                                    10−2                                                                                    10−2
+
+
+
+                                    10−3                                                                                    10−3
+
+
+
+                                    10−4                                                                                    10−4
+                                       0.5                  1            1.5                   2                2.5                    0.2         0.4   0.6   0.8       1           1.2     1.4
+                                                                                                           Se                                                                                      Sγ
+                                                                        Muon                                                                                   Neutron
+                                           1
+                               ρu [m-2]
+
+
+
+
+                                                                                                                       ρ [m-2]
+
+
+
+
+                                               (c)                                       log (E/GeV)=6.9 Proton
+                                                                                            10                              10−2         (d)                                 log (E/GeV)=6.9 Proton
+                                                                                                                                                                                10
+                                                                                         log (E/GeV)=6.1 Proton
+                                                                                            10                                                                               log (E/GeV)=6.1 Proton
+                                                                                                                            n
+
+
+
+
+                                    10−1
+                                                                                                                                                                                10
+                                                                                         log (E/GeV)=5.1 Proton
+                                                                                            10
+                                                                                                                                                                             log (E/GeV)=5.1 Proton
+                                                                                         log (E/GeV)=6.9 Iron                                                                   10
+                                                                                            10
+                                                                                         log (E/GeV)=6.1 Iron               10−3                                             log (E/GeV)=6.9 Iron
+                                    10−2                                                    10                                                                                  10
+                                                                                         log (E/GeV)=5.1 Iron                                                                log (E/GeV)=6.1 Iron
+                                                                                            10
+                                                                                                                                                                                10
+
+
+                                    10−3
+                                                                                                                                                                             log (E/GeV)=5.1 Iron
+                                                                                                                                                                                10
+                                                                                                                            10−4
+
+                                    10−4
+
+                                                                                                                            10−5
+                                    10−5
+
+
+                                    10−6                                                                                    10−6
+                                       0.2           0.4   0.6   0.8      1       1.2      1.4     1.6         1.8             500            1000 1500 2000 2500 3000 3500 4000 4500 5000
+                                                                                                           Su                                                                      rn0 [m]
+
+    Fig. 14. Distribution of r vs. s when shower is induced by proton and iron respectively with different energies: (a)ρe
+      vs.se ;(b)ργ vs. sγ ; (c)ρµ vs. sµ ; (d)ρn vs. r0n .
+
+
+     This paper also studies the case of a zenith Angle of 45°, which will increase the atmospheric depth compared
+to the case of vertical incidence. For the energy segment studied in this paper and the selected altitude, the zenith
+angle is the atmospheric depth of 45°will exceed the atmospheric depth required for the shower to develop to the
+maximum area, while the atmospheric depth of vertical incidence is near the shower to develop to the maximum
+area. So the distribution of detected secondary components will be affected and the energy reconstruction accuracy
+and particle identification ability will be affected. The distribution comparison of secondary components at different
+zenith angles is shown in figure 17. It can be seen that as the zenith Angle increases, the number of electrons and
+gamma rays will decrease because they have passed through the shower maximum and their fluctuations will also
+be significantly larger. The muse interact less with the atmosphere during propagation, the increase of atmospheric
+depth has little influence on the muse number and the fluctuation of the muse number is also small. Neutrons
+also continue to undergo hadron shower processes with the atmosphere, attenuating more relative to the muon and
+the fluctuation of neutrons increases with the increase of the zenith, the amplitude is between the electromagnetic
+particles and the muon. The telescope measures the Cherenkov light at a fixed position, and the density of the
+Cherenkov light varies with the zenith angle depending on the vertical distance of the detection area from the shower
+axis ”r”. As shown in figure 17, when r= 50 m, the number of Cherenkov photons decreases with the increase of
+
+
+                                                                                                                      12
+                                                                                     Electron                                                                                                    Gamma
+
+
+
+
+                                 Counts
+
+
+
+
+                                                                                                                                            Counts
+                                          10   3
+                                                       (a)                                           log (E/GeV)=5.1                                               (b)                                              log (E/GeV)=5.1
+                                                                                                           10                                                                                                             10
+                                                                                                                                                     103
+                                                                                                               Proton                                                                                                      Proton
+                                                                                                               Iron                                                                                                        Iron
+                                               2
+                                          10
+                                                                                                                                                     102
+
+
+
+
+                                          10                                                                                                             10
+
+
+
+
+                                               1                                                                                                          1
+
+                                                             0.5         1          1.5         2              2.5            3                                    0.2        0.4    0.6    0.8             1      1.2        1.4   1.6      1.8
+                                                                                                                                      Se                                                                                                     Sγ
+                                                                                      Muon                                                                                                       Neutron
+                                 Counts
+
+
+
+
+                                                                                                                                            Counts
+                                                       (c)                                                                                                         (d)
+
+                                                        log (E/GeV)=5.1                                                                              102           log (E/GeV)=5.1
+                                                              10                                                                                                         10
+                                      102                                                                                                                                 Proton
+                                                               Proton
+                                                               Iron                                                                                                       Iron
+
+                                                                                                                                                         10
+                                          10
+
+
+
+
+                                            1                                                                                                             1
+
+                                                              −5                                    −3
+                                                         10                  10−4            10                        10−2                              10
+                                                                                                                                                              −6
+                                                                                                                                                                                                  10
+                                                                                                                                                                                                       −5
+                                                                                                                                                                                                                                           10−4
+                                                                                                                           ρu [m-2]                                                                                                 ρn [m-2]
+
+
+
+Fig. 15.   Comparison of the distribution of (a) se ,(b) sγ , (c) ρµ , (d) ρn between proton and iron with log10 (E/GeV )=5.1
+
+
+
+
+                                                                                     Electron                                                                                                    Gamma
+                                 Counts
+
+
+
+
+                                                                                                                                            Counts
+
+
+
+
+                                                       (a)                                      log (E/GeV)=6.9                                                    (b)                                            log (E/GeV)=6.9
+                                                                                                         10                                                                                                          10
+
+                                                                                                         Proton                                                                                                      Proton
+
+                                                                                                         Iron                                                                                                        Iron
+                                          10
+
+                                                                                                                                                         10
+
+
+
+
+                                               1
+
+
+                                                       0.6         0.8       1      1.2   1.4            1.6         1.8          2                            0.2             0.4         0.6              0.8           1          1.2
+                                                                                                                                      Se                                                                                                     Sγ
+                                                                                      Muon                                                                                                        Neutron
+                                   Counts
+
+
+
+
+                                                                                                                                                Counts
+
+
+
+
+                                                        (c)                                         log (E/GeV)=6.9                                                (d)                                             log (E/GeV)=6.9
+                                                                                                         10                                                                                                              10
+
+                                                                                                         Proton                                                                                                           Proton
+                                                                                                                                                         10
+                                            10
+                                                                                                         Iron                                                                                                             Iron
+
+
+
+
+                                                   1                                                                                                      1
+
+
+
+                                                             10−2                         10−1                                         1                                                     10
+                                                                                                                                                                                                  −3
+                                                                                                                                                                                                                                           10−2
+                                                                                                                           ρu [m ]    -2
+                                                                                                                                                                                                                                     ρn [m-2]
+
+
+    Fig. 16. Comparison of the distribution of (a) se , (b) sγ , (c) ρµ , (d) ρn between proton and iron with
+      log10 (E/GeV )=6.9
+
+
+
+
+                                                                                                                                           13
+zenith angle. While, the number of Cerenkov photons increases with the increase of zenith Angle at r= 150 m. At r=
+50 m and r= 150 m, the fluctuation of Cherenkov photon number increases significantly and the variation amplitude
+is similar to the fluctuation amplitude of electromagnetic particles. In summary, when the atmospheric depth exceeds
+the atmospheric depth where the shower develops to the maximum, the fluctuation of various secondary components
+increases, the fluctuation of Muse changes the least and the fluctuation of electromagnetic particles changes the most.
+
+                                                         Counts
+     Counts
+
+
+
+
+              102
+
+
+
+
+                                                                                                                      Counts
+
+
+
+
+                                                                                                                                                                                Counts
+                       (a)                                              (b)                                                                                                                   (d)
+                                                                  102
+                                                                                              Zenith=0o                        102   (c)             Zenith=0o                                                    Zenith=0o
+                                      Zenith=0o                                                                                                                                                             Entries        500
+                                                                                            Entries           500                                Entries            500
+                                    Entries      500
+                                                                                            Mean         0.2905                                  Mean            0.01613                                    Mean       0.00025
+                                    Mean      0.2685                                                                                             Std Dev    0.0007608
+                                                                                            Std Dev     0.01145                                                                                             Std Dev 1.881e−05
+                                    Std Dev   0.01361                                                                                                             o
+                                                                                             Zenith=45o                                            Zenith=45
+              10                                                                                                                                                                         10
+                                                                                                                                                                                                                Zenith=45o
+                                     Zenith=45o                    10
+                                                                                           Entries            500              10                Entries            500
+                                                                                                                                                                                                           Entries         500
+                                                                                                                                                 Mean            0.01394
+                                    Entries      500                                       Mean          0.1456                                                                                            Mean       0.0001388
+                                                                                                                                                 Std Dev    0.0008837
+                                    Mean      0.1119                                       Std Dev      0.01599                                                                                            Std Dev    1.671e−05
+                                    Std Dev   0.0143
+
+                1                                                                                                                                                                         1
+                                                                    1                                                            1
+
+
+                10−2         10−1                   ρe                                                                                                                                              10−4
+                                                                                                                                                                                                             −3
+                                       1
+                                                                              10−1                       1      ργ                          −2
+                                                                                                                                           10                              ρu
+                                                                                                                                                                                                           10                 ρn
+                                                          Counts
+
+
+
+
+                                                                                                                      Counts
+                                                                        (e)                                                          (f)
+                                                                  102
+                                                                                            Zenith=0o                          102                  Zenith=0o
+                                                                                          Entries             500                                 Entries           500
+                                                                                                                                                  Mean      2.428e+04
+                                                                                          Mean        1.567e+05
+                                                                                                                                                  Std Dev          1082
+                                                                                          Std Dev         8484
+                                                                                                                                                   Zenith=45o
+                                                                   10                      Zenith=45o                          10                 Entries           500
+                                                                                          Entries             500
+                                                                                                                                                  Mean      3.027e+04
+                                                                                          Mean        8.33e+04
+                                                                                                                                                  Std Dev          2451
+                                                                                          Std Dev         9625
+
+
+                                                                    1                                                            1
+
+
+                                                                                      5                   6
+                                                                                                                                                                 ρCherenkov
+                                                                                                                                                             5
+                                                                                                                                     104
+                                                                                     10
+                                                                                                      ρCherenkov
+                                                                                                        10                                                  10
+
+
+
+
+    Fig. 17. Comparisonofthedistributionof ρe (a), sγ (b), ρµ (c), ρn (d) and ρC at r=50 m (e), r=150 m (f) for θ =0◦
+      and θ=45◦ . The primary particle is iron with energy log10 (E/GeV )=6.1.
+
+
+
+
+6   Summary
+     The single-component energy spectrum of the cosmic ray knee region is an important means to understand the
+physical origin of the cosmic ray knee region. Since the ground experiment lacks a good absolute energy calibration
+method, and can only measure secondary particles produced by the primary particles in EAS and cannot directly
+measure the primary particles. The energy measurement and particle identification ability of the ground experiment
+are called the limiting factors of single-component energy spectrum measurement. Based on this, we simulate the
+characteristics of secondary components of cosmic rays with different energies and primary particle compositions at
+4400 m above sea level in EAS, including positrons, gamma rays, muons, neutrons and Cherenkov photons. The
+lateral distribution characteristics of various secondary components and the strong interaction dependence of the
+lateral distribution of different secondary components are studied in detail and the lateral distribution is fitted well
+with specific functions. The method and accuracy of energy reconstruction, strong interaction model dependence and
+discriminability of cosmic-ray particle identification are studied in detail with these fitting parameters. It provides
+reference for the selection of detector types, energy reconstruction methods and component identification variables
+in various ground experiments.
+     For energy reconstruction, using the number density of secondary particles at a certain vertical distance from
+the core site ”r”is a better choice than the total number of secondary particles. It is less compositional dependent
+than the total number of particles modified by the age parameter. When the primary particle is proton, the energy
+reconstruction accuracy of electron, gamma ray and Cherenkov photon at 50 m is good and is about 10%-19%. When
+the primary particle is iron, the energy reconstruction accuracy of gamma ray, Cherenkov photon and Muon at 150
+m is better and is about 4%-8%. The higher the mass number of the primary particle, the higher the precision of
+energy reconstruction. In the experiment, multiple secondary particles can be combined according to the accuracy of
+individual energy reconstruction of different secondary particles to obtain energy reconstruction variables with less
+component dependence and higher precision.
+     For particle identification, the identification energy of muon particle number density ”ρµ ” is the best in both the
+low energy segment and the high energy segment. The age parameter of positron and gamma ray transverse distri-
+bution shape is better in the low energy segment (such as around 100 TeV) and the identification ability of neutron
+particle number density is better in the high energy segment (such as around 10 PeV). In the experiment, multiple
+secondary particles can be combined to obtain component identification variables with lower energy dependence and
+
+
+                                                                                                                     14
+better identification ability according to the identification ability of different secondary particles, such as multivariate
+analysis method [30] or deep learning method [31]. The parameters provided in this paper can be directly used as
+training variables.
+     For the difference in transverse distribution of secondary particles caused by the two strong interaction models
+of EPOS-LHC and QGSJET-II-04, the difference in the number of positrons, gamma rays and Cherenkov photons
+is very close and they are smaller than that of muon and neutrons and it is within 5% at r>20m and within 10%
+at all ranges of r. The difference in the number of muon is within 5% at r>100m. But the maximum difference
+can be close to 20% (corresponding to the original particle is iron, the energy is about 10 PeV, near r=5 m). The
+difference of neutrons is the largest, the difference is 10%-20% at r>100m and the maximum difference is about 40%
+(corresponding to r<10m). Overall, the difference between the muon and neutron models is significantly reduced at
+r>100m. In the experiment, secondary particles larger than 100 m were selected for reconstruction. It can reduce
+the dependence of the strong interaction model effectively.
+     For the incidence of 45°zenith angle, compared with the vertical incidence, the number of electromagnetic
+particles will be significantly reduced and the fluctuation will be larger and the energy reconstruction accuracy and
+particle identification ability obtained by them will be worse. The number of muses will be slightly reduced and
+the fluctuation of the number of muses will not change much. The detection performance will be little affected.
+The decrease in the number of neutrons and the increase in the number of particles is somewhere between an
+electromagnetic particle and a muon. The change of Cherenkov photon relative to the vertical incidence depends
+on the vertical distance between the photon and the shower axis and the fluctuation of the photon number is also
+larger relative to the vertical incidence. And the amplitude of the fluctuation is similar to that of electromagnetic
+particles. In summary, when the atmospheric depth exceeds the atmospheric depth where the shower develops to the
+maximum, the fluctuation of various secondary components increases and the detection performance deteriorates.
+The fluctuation of the particle changes the least and the fluctuation of the electromagnetic particle changes the most.
+     In summary, without considering the detector effect, this paper studies the energy reconstruction accuracy
+of various secondary components during energy reconstruction and the identification ability of the original particle
+composition, which provides references for the selection of detector types, energy reconstruction variables and methods
+and component identification variables in ground experiments.
+
+Acknowledgements
+    This work is supported by the Science and Technology Department of Sichuan Province, China (Grant No.
+2021YFSY0031, 2020YFSY0016), the National Key R&D Program of China (Grant No. 2018YFA0404201), and the
+National Natural Science Foundation of China (Grant Nos. 12205244, 12147208).
+
+
+References
+ 1   Prosin V V, Berezhnev S F, Budnev N M, et al. 2014 Nucl. Instrum. Methods Phys. Res. Sect. A 756 94
+ 2   Blumer J, Engel R, Horandel J R 2009 Prog. Part. Nucl. Phys. 63 293
+ 3   Rújula De A 2006 Nucl. Phys. B 151 23
+ 4   Ahn H S, Allison P, Bagliesi M G 2009 Astrophys. J. 707 593
+ 5   Barao F 2004 Nucl. Instruments Methods Phys. Res. Sect. A 535 134
+ 6   Alemanno F, An Q 2021 Phys. Rev. Lett. 126 201102
+ 7   An Q, Asfandiyarov R, Azzarello P 2019 Sci. Adv. 5 3793
+ 8   Chang J, Ambrosi G, An Q 2017 Astropart. Phys. 95 6
+ 9   Sparvoli R 2013 Nucl. Phys. B 239 115
+10   Antoni T, Apel W D, Badea A F 2005 Astropart. Phys. 24 1
+11   Bartoli B, Bernardini P, Bi X J, Cao Z 2017 Astropart. Phys. 93 46
+12   Ma X H, Bi Y J, Cao Z 2022 Chin. Phys. C 46 030001
+13   Abbasi R, Abdou Y, Ackermann M 2013 Nucl. Instrum. Methods. Phys. Res. Sect. A 700 188
+14   Abbasi R U, Abe M, Abu-Zayyad T 2018 Astro. J. 865 74
+15   Amenomori M, Bao Y W 2021 Phys. Rev. Lett. 127 031102
+16   Apel W D, Arteaga-Velázquez J C 2011 Phys. Rev. Lett. 107 171104
+17   Apel W D, Arteaga-Velázquez J C 2013 Phys. Rev. D 87 081101
+18   Bartoli B, Bernardini P, Bi X J, Cao Z 2015 Phys. Rev. D 92 092005
+19   Aartsen M G, Abbasi R 2020 Phys. Rev. D 102 122001
+20   Aartsen M G, Ackermann M, Adams J 2019 Phys. Rev. D 100 082002
+21   Heck D, Knapp J, Capdevielle J N, Schatz G, Thouw T 1998 CORSIKA: A Monte Carlo Code to Simulate Extensive Air Showers
+22   Capdevielle J N, Cohen F 2005 J. Phys. G 31 507
+23   Apel W D, Badea A F, Bekk K 2006 Astropart. Phys. 24 467
+
+
+
+                                                              15
+24 Feng Y L, Zhang Y, Chen T L 2019 Chin. Phys. C 43 075002
+25 Alexandru C E, Alexandru J, Lavinia-Elena G 2019 Chin. Phys. C 43 083001
+26 Li C 2018 Ph. D. Dissertation (Beijing:University of Chinese Academy of Sciences) (in Chinese) [李骢2018 博士学位论文(北京:中国科
+   学院大学)]
+27 Rivera-Rangel D, Arteaga-Velázquez J C 2021 37th International Cosmic Ray Conference (ICRC 2021) OnlineBerlin, Germany July
+   1223, 2021 p3721
+28 Aharonian F, An Q, Axikegu 2021 Chin. Phys. C 45 025002
+29 Conceio R, Peres L 2021 Eur. Phys. J. C 81 1
+30 Yin L Q, Zhang S S, Cao Z, Bi B Y 2019 Chin. Phys. C 43 075001
+31 Jin C, Chen S Z, He H H 2020 Chin. Phys. C 44 065002
+
+
+
+
+                                                             16
+

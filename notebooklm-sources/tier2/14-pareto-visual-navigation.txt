@@ -1,0 +1,3657 @@
+Journal Title
+XX(X):1–29
+©The Author(s) 2023
+Reprints and permission:
+sagepub.co.uk/journalsPermissions.nav
+DOI: 10.1177/ToBeAssigned
+www.sagepub.com/
+
+Navigating the Wild: Pareto-Optimal
+Visual Decision-Making in Image Space
+
+SAGE
+
+Durgakant Pushp , Weizhe Chen , Zheng Chen , Chaomin Luo , Jason M. Gregory3 , and
+Lantao Liu1
+
+arXiv:2511.07750v1 [cs.RO] 11 Nov 2025
+
+1
+
+1
+
+1
+
+2
+
+Abstract
+Navigating complex real-world environments requires understanding the semantic context and effectively making
+decisions. Existing solutions leave room for improvements: traditional reactive approaches that do not maintain a map
+often struggle in complex environments, map-dependent methods demand significant effort in mapping processes,
+and learning-based methods rely on large training datasets and face the difficulty of generalization. To address
+these challenges, we propose a novel visual semantic navigation framework that combines data-driven semantic
+understanding, Pareto-optimal decision-making, and image-space planning. Our approach uses a local environmental
+representation called navigability image, which allows the robot to assess immediate traversability without relying
+on apriori mapping or navigation data. Building on this, we introduce Pareto-Optimal Visual Navigation (POVNav),
+a decision-making framework in the image space that identifies appropriate sub-goals, constructs collision-free
+paths, and generates control commands using visual servoing. This framework also supports selective navigation
+behaviors, such as avoiding traversable yet slippery grasslands to prevent getting stuck, by dynamically adjusting
+the navigability criteria within the local representation. POVNav is lightweight, operating solely with a monocular
+camera and without requiring map storage or training data collection, making it highly versatile for different robotic
+platforms and environments. Extensive year-round real-world experiments validated its efficacy in both structured
+indoor environments and unstructured outdoor settings, including dense forest trails and snow-covered roads. Field
+experiments using various image segmentation techniques demonstrated its robustness and adaptability across a wide
+range of conditions. Additionally, we demonstrate that POVNav sucessfully guides a robot through narrow pipes in a
+culvert inspection task. Overall, we showcase the utility of POVNav in real-world scenarios, highlighting its flexibility and
+computational efficiency for autonomous robots in complex environments.
+Keywords
+Navigation in the Wild, Visual Semantic Navigation, Pareto-Optimal Decision-Making
+
+1
+
+Introduction
+
+Humans possess a remarkable ability to navigate complex
+environments by intuitively interpreting visual scenes at
+a semantic level – effortlessly distinguishing between
+walkable paths, obstacles, and hazardous areas while
+adapting to diverse terrain conditions (Dwivedi et al. 2024).
+This natural ability to understand both the semantic meaning
+and traversability of environmental elements has inspired
+the development of visual semantic navigation systems for
+autonomous robots. Through semantic segmentation of the
+environment, robots can identify traversable spaces and
+obstacles, moving closer to achieving human-like navigation
+capabilities in challenging real-world applications. A
+motivating scenario is shown in Figure 1.
+Visual semantic navigation is especially crucial in field
+robotics applications. For instance, in disaster response
+scenarios such as radiation accidents or search-and-rescue
+operations after devastating earthquakes, robots must quickly
+differentiate between safe terrain and hazardous areas,
+including fires and unstable structures (Wellhausen et al.
+2020). Agricultural robots need to differentiate between crop
+rows and traversable paths covered with leaves and weeds,
+enabling efficient farmland navigation while preventing crop
+Prepared using sagej.cls [Version: 2017/01/17 v1.20]
+
+damage (Sivakumar et al. 2021). In marine environments,
+underwater robots must identify safe passages through coral
+reefs while maintaining stable navigation – simultaneously
+focusing on scientifically relevant features and avoiding
+disturbance to sensitive ecosystems (Koreitem et al. 2020).
+In recent years, visual semantic navigation has witnessed
+significant advancements, with a wide range of approaches
+proposed to address the challenges of autonomous navigation
+in complex environments. These approaches can be
+broadly categorized into two main ideas: modular and
+end-to-end approaches, each with distinct strengths and
+limitations. Modular methods are the classic or symbolic
+approaches that decompose the navigation task into
+separate modules, often including semantic Simultaneous
+
+1 D. Pushp, W. Chen, Z. Chen and L. Liu are with Luddy
+School of Informatics, Computing, and Engineering, Indiana University,
+Bloomington, IN 47408, USA. Email: dpushp@iu.edu
+2 C. Luo is with the Department of Electrical and Computer Engineering,
+Mississippi State University, MS 39762, USA.
+3 J. Gregory is with DEVCOM Army Research Laboratory, USA.
+
+Corresponding author:
+Lantao Liu
+Email: lantao@iu.edu
+
+2
+
+Journal Title XX(X)
+
+Goal
+Water
+Water
+Grass
+
+Mud
+
+Figure 1. A motivating example of visual semantic navigation in the wild. Visual semantic navigation enables the robot to interpret
+the semantic meaning of environmental elements and adapt its path to diverse terrain conditions. The green path represents the
+shortest route, passing through mud and water, while the yellow path avoids these non-traversable areas. On the right panels, from
+top to bottom, appear the observed image, segmented image, and a planning image illustrating a semantically-aware, safe path.
+
+Localization and Mapping (SLAM), planning, and control.
+This modularity enhances system interpretability and allows
+for targeted improvements within each component. However,
+maintaining an accurate map in modular approaches can be
+expensive in terms of computation and storage. On the other
+hand, end-to-end methods bypass explicit mapping by using
+deep neural networks to directly transform raw sensor data
+into control commands, enabling fast and reactive decisionmaking. Although end-to-end methods reduce mapping
+overhead, they often lack interpretability and struggle to
+generalize well in unseen environments.
+Deploying these approaches in the wild presents additional
+challenges. Outdoor environments are characterized by
+high variability and complexity, such as fluctuating
+lighting, changing weather, and diverse terrain, which can
+significantly impact system performance. Modular systems
+may find it costly to continuously update (semantic) maps
+which change constantly in dynamic environments, while
+end-to-end systems may fail to adapt effectively to unseen
+scenarios or sensor noise. These challenges highlight the
+need for a hybrid approach that enjoys the interpretability
+and modularity of modular systems and the adaptability and
+efficiency of end-to-end systems, combining the best of both
+worlds to achieve robust and efficient navigation in the wild.
+To this end, we propose a novel framework for visual
+semantic navigation that leverages the strengths of both modular and end-to-end approaches. To maintain interpretability
+and modularity, the proposed framework still comprises
+separate modules for perception, planning, and control,
+allowing for easy integration of new algorithms in each
+component, e.g., advanced segmentation models (Kirillov
+et al. 2023) or reasoning traversability by Vision Language
+Models (VLMs) (Song et al. 2024). Instead of depending
+on explicit semantic mapping, we adopt an approach that
+Prepared using sagej.cls
+
+directly utilizes image observations to guide navigation decisions, aligning with end-to-end methodologies.
+Without a semantic map, traditional planning algorithms
+cannot be directly applied, since they require a global bird’seye view representation of the environment. The challenge
+then becomes how to plan and control a robot using only
+ego-centric image. A straightforward solution is to segment
+the image into navigable and non-navigable regions, plan a
+path through the navigable regions from the robot’s current
+position to the projected goal in the image, and control the
+robot to follow this path using visual servoing. However, this
+approach has two challenges:
+• Segmentation Noise: real-world segmentation images
+are typically noisy and incomplete, leading to
+suboptimal paths and control actions.
+• Goal Occlusion: When the goal is occluded (e.g.,
+behind a tree), there does not exist a collision-free path
+connecting the robot to the goal in the image space.
+To address the first challenge, we observe that segmentation accuracy exhibits an inverse relationship with depth, i.e,
+objects in close proximity yield more reliable segmentation
+results compared to distant scenes. Since distant objects typically have minimal impact on immediate navigation decisions, we introduce the concept of visual horizon that marks
+the boundary of reliably navigable regions in the robot’s
+vicinity. By constraining our analysis to the space within this
+visual horizon, we mitigate the effects of segmentation noise
+and incompleteness.
+The second challenge can be addressed by selecting a
+subgoal in the image. Effective subgoal selection must
+balance multiple potentially competing criteria: (1) the
+subgoal must be reachable via an obstacle-free path; (2)
+reduce the distance to the final goal; and (3) allow sufficient
+deviation to navigate around obstacles when necessary. The
+proposed framework employs Pareto-optimality to analyze
+
+Pushp et al.
+
+the trade-offs among these objectives, hence the name
+Pareto-Optimal Visual Navigation (POVNav).
+Intuitively, POVNav first generates a navigability image
+from the semantic segmented image, focusing on the space
+within the visual horizon. After projecting the goal onto the
+navigability image, POVNav selects a subgoal on the visual
+horizon that balances goal-reaching and obstacle avoidance.
+A simple and efficient planning algorithm then generates
+a safe visual path from the robot’s current position to the
+subgoal, which is then followed using visual servoing. The
+advantages of POVNav are multi-fold:
+• Modularity: The proposed framework maintains the
+interpretability and modularity of traditional modular
+systems, allowing for easy integration of various
+advanced algorithms in each component.
+• Efficiency: By directly processing image observations, POVNav avoids the overhead of maintaining
+an explicit map, enabling fast and reactive decisionmaking.
+• Robustness: The concept of the visual horizon mitigates the effects of segmentation noise and incompleteness, enhancing the robustness of navigation decisions.
+• Adaptability: By selecting subgoals on the visual
+horizon, POVNav can effectively navigate in dynamic
+environments with occluded goals, adapting to
+different scenarios.
+This paper extends our prior conference publication
+(Pushp et al. 2023) by substantially enriching the framework,
+analysis, and evaluation of POVNav. The main contributions
+of this journal version are:
+• A comprehensive literature review situates POVNav
+within the broader context of vision-based navigation,
+highlighting its unique formulation that combines
+semantic segmentation, image-space planning, and
+Pareto-optimal decision-making.
+• New theoretical analysis is introduced, including
+proofs of weak Pareto-optimality, control stability, and
+computational complexity of the overall framework.
+• Additional experimental results are provided through
+extensive simulations and long-duration field trials
+across diverse indoor and outdoor environments using
+multiple robot platforms.
+• Systematic ablation and robustness studies isolate the
+impact of key components and validate the method’s
+generalizability under varying environmental and
+perceptual conditions.
+• Expanded discussion of implementation details offers
+practical insights into segmentation model integration,
+parameter tuning, and real-time deployment strategies
+for resource-constrained systems.
+Experimental results from comparing the proposed
+framework against representative baseline methods reveal
+that, the proposed approach achieves a significantly higher
+success rate across diverse environments, ranging from
+sparsely populated areas to densely cluttered obstacle
+configurations. Moreover, POVNav consistently identifies
+and follows shorter paths. We also present real-world field
+trials to show the robustness and adaptability of the proposed
+Prepared using sagej.cls
+
+3
+
+framework, highlighting its potential to navigate through
+various challenging scenarios. Last but not least, we release
+the code to facilitate future research.
+
+2
+
+Related Work
+
+Our work aligns with robust visual semantic navigation
+approaches, which generally fall into two main categories: non-learning-based methods, such as optical flow,
+appearance-based tracking, and object feature tracking; and
+learning-based solutions. In the following sections, we
+review key advancements in each of these areas, examining their contributions and limitations within the context
+of autonomous navigation. Additionally, as our proposed
+framework relies heavily on segmentation techniques to
+interpret and navigate environments, we discuss various
+semantic segmentation methods, highlighting how their differing outputs can impact navigational performance.
+
+2.1
+
+Feature-Based Visual Navigation
+
+Visual features are crucial in enabling robots to interpret and
+interact with their surroundings. Optical flow, as a widelyused visual feature, plays a significant role in obstacle
+avoidance and visual navigation. A comprehensive review
+of optical flow methods is provided by Liu et al. (1998).
+Giachetti et al. (1998) introduced a method for achieving
+dense and reliable optical flow from images captured by a
+car-mounted camera in outdoor environments. By employing
+correlation-based techniques and shock compensation, they
+estimated egomotion, including speed and angular velocity,
+through analysis of flow patterns on flat roads. This optical
+flow approach also facilitated coarse segmentation, allowing
+for the differentiation of moving objects and enhancing the
+localization of motion boundaries. These findings highlight
+the potential of optical flow in vision systems for vehicle
+navigation and driver assistance applications.
+Song and Huang (2001) combines correlation-based and
+differential techniques to achieve faster real-time estimation.
+Optical flow has since been widely applied in moving
+object detection (Talukder and Matthies 2004; Braillon et al.
+2006) and for mobile robot navigation within constrained
+environments (McCarthy and Bames 2004). Ohnishi and
+Imiya (2006) applied optical flow to detect dominant planes
+— a critical element in path planning. Furthermore, optical
+flow algorithms have demonstrated significant potential for
+real-time UAV navigation across a range of tasks (Yamada
+et al. 2003; Rondon et al. 2009; Conroy et al. 2009;
+Mammarella et al. 2008; Janschek et al. 2006). Specifically,
+Zingg et al. (2010) developed a wall collision avoidance
+technique utilizing a depth map derived from optical flow on
+images captured by onboard cameras.
+The growing popularity of optical flow has spurred
+developments in both hardware and open-source solutions,
+such as the optical flow sensor designed by Honegger et al.
+(2013), which integrates a machine vision CMOS image
+sensor and has been demonstrated in-flight on a micro air
+vehicle. Over the past decade, research has increasingly
+focused on refining optical flow feature estimation through
+diverse methods (Zhai et al. 2021; Hui et al. 2018; Ilg
+et al. 2017, 2018; Ren et al. 2017; Wulff and Black
+2015; Bailer et al. 2015; Ranjan and Black 2017), leading
+
+4
+
+Journal Title XX(X)
+
+to notable improvements in visual navigation. However,
+relatively few studies have examined the integration of
+optical flow into motion planning and control. Recent
+works that address this gap include Ponce et al. (2018);
+Károly et al. (2019); Meronen et al. (2020); Argus et al.
+(2020); de Croon et al. (2021); Boretti et al. (2022),
+highlighting the emerging interest in leveraging optical flow
+for comprehensive navigation and control in robotics. In
+general, optical flow-based methods are effective for obstacle
+avoidance as long as they can detect sufficient features.
+However, they lack the ability to perform goal-oriented
+navigation and adaptive behavior.
+While optical flow has remained a popular feature for
+visual navigation over the past decades, previous research
+has also explored alternative approaches, including stored
+image templates (Bista et al. 2016; Hong et al. 1992;
+van der Zwaan et al. 2002; Chang et al. 2010; Mielle
+et al. 2016; Courbon et al. 2008; Menegatti et al. 2004;
+Franz and Mallot 2000; Srinivasan et al. 1999; Jayender
+et al. 2008), information-theoretic approach (Dame and
+Marchand 2011; Vakil et al. 2015; Wu et al. 2021; Carlone
+and Karaman 2018; Soundararajan and Bovik 2013) and
+feature tracking-based navigation methods (Anand et al.
+2019; Srivastava et al. 2021; Pushp et al. 2022; Jia et al.
+2009; Wang et al. 2021; Zhao and Pei 2013; Mateus
+et al. 2005; Zhang et al. 2021; Liu et al. 2023) to control
+robot motion. An image segmentation approach based on
+sub-region growing to determine paths is proposed by
+Zhang et al. (2008), where control parameters are derived
+from path boundary information. Although these methods
+provide solutions for obstacle avoidance, they fall short in
+facilitating goal-directed navigation. Achieving visual, goaloriented navigation poses unique challenges, as existing
+techniques struggle to relate 3D goal locations to the
+observable image features, particularly when the goal lies
+outside the camera’s field of view. A notable prior work
+that explores a related direction is Otte et al. (2009), which
+proposed planning directly in image space using disparitybased representations to generate paths without relying on
+global maps. While this work demonstrated the feasibility
+of image-space planning and local obstacle avoidance,
+it did not account for non-navigability arising from
+semantic understanding and focused solely on geometric
+cues derived from depth information. In contrast, our
+proposed framework incorporates semantic information to
+reason about navigability, and identifies an optimal sub-goal
+within the current observation, effectively bridging the gap
+between image-space features and goal-directed behavior.
+Unlike previous methods, our approach provides a unified
+framework for navigation in unknown environments, relying
+solely on a monocular camera and a directional cue toward
+the goal.
+
+2.2
+
+Learning-Based Visual Navigation
+
+A large family of current frameworks is data-driven or based
+on machine learning (Shen et al. 2019; Bansal et al. 2020).
+For example, imitation learning-based approaches have been
+broadly explored to train a navigation policy that enables
+a robot to mimic human behaviors or navigate closely to
+certain waypoints without a prior map (Manderson et al.
+2020; Hirose et al. 2021; Pan et al. 2020; Wu et al. 2020;
+Prepared using sagej.cls
+
+Yan et al. 2022; Karnan et al. 2022). A large amount
+of work on visual navigation can also be found in the
+computer vision community (Chaplot et al. 2020b; Lei et al.
+2024; Kwon et al. 2023; Wasserman et al. 2023; Kim
+et al. 2023; Hahn et al. 2021; Kwon et al. 2021; Li and
+Košecka 2020; Chaplot et al. 2020b; Liu and Okatani 2022;
+Chaplot et al. 2020a). These approaches exploit and integrate
+deep learning methods to train navigation policies that
+perform remarkably well when provided sufficient training
+data, but can fail if no or very limited data is available.
+In contrast to the data-driven approaches, we introduce a
+computationally light but effective planning and control loop
+that decouples the representation from the behavior learning
+(like modular learning approaches) using segmentationbased visual representation. Our solution is more flexible,
+robust, and adaptable to a variety of navigation missions
+since it makes no assumption about the data it needs to learn
+the policy.
+
+2.3
+
+Visual Semantic Segmentation
+
+Semantic segmentation assigns a unique human-defined
+semantic label to each pixel in an image, providing
+detailed scene understanding essential for applications like
+navigation. Our proposed method, POVNav, leverages pretrained segmentation models to parse navigability and uses
+image-space planning for action generation. The overall
+performance of POVNav is closely tied to the predictive
+accuracy of the employed segmentation models.
+The advent of deep neural networks, particularly Fully
+Convolutional Networks (FCNs) (Long et al. 2015), significantly improved semantic segmentation performance
+by using convolutional neural networks to predict pixelwise classifications. Subsequent works have enhanced
+FCNs through various techniques, such as multi-scale feature aggregation using different kernel sizes and dilation
+rates (Chen et al. 2017a,b; Yu and Koltun 2015), multiresolution input generation via image pyramids (Zhao et al.
+2017), probabilistic graph-based smoothing (Liu et al.
+2017), and encoder-decoder structures for feature compensation (Ronneberger et al. 2015). Recently, Transformerbased models (Vaswani et al. 2017; Dosovitskiy et al. 2020;
+Ranftl et al. 2021) have gained prominence in semantic
+segmentation. Transformers utilize attention mechanisms to
+model long-range dependencies among pixels. Methods such
+as Zheng et al. (2021) treat semantic segmentation as a
+sequence-to-sequence prediction task, encoding images as
+patch sequences. SegFormer (Xie et al. 2021) combines a
+hierarchical Transformer encoder with a lightweight MLP
+decoder to create a robust yet efficient segmentation framework. A novel architecture for image segmentation (Cheng
+et al. 2022) incorporates masked attention, which extracts
+localized features by constraining cross-attention within predicted mask regions. These methods are particularly suited
+for applications like POVNav, as they allow online correction
+of navigable and non-navigable class definitions, addressing domain shifts effectively. However, field experiments
+revealed significant performance degradation when there is a
+substantial difference between the training and testing data,
+highlighting their limitations under extreme domain shifts.
+To address domain adaptation challenges, transfer learning
+frameworks have been widely explored. Techniques such
+
+Pushp et al.
+
+5
+Table 1. Notation System.
+
+Table 2. Mathematical Symbols.
+
+Meaning
+
+Example
+
+Remark
+
+Symbol
+
+Meaning
+
+variable
+constant
+vector
+matrix
+set or space
+function
+functional
+special PDF
+definition
+transpose
+absolute value
+Euclidean norm
+
+x
+X
+x
+X
+R
+f(·)
+E(·)
+N
+≜
+⊺
+m
+|·|
+∥·∥2
+
+lower-case
+upper-case
+bold, lower-case
+bold, upper-case
+blackboard, upper-case
+typewriter
+typewriter, upper-case
+calligraphy, upper-case
+
+E
+t
+st
+pt
+xt
+yt
+θt
+It
+H
+W
+at
+vt
+ωt
+g
+xg
+yg
+Ot
+π
+f(·, ·)
+d(·, ·)
+Dsafe
+Vmax
+Ωmax
+∆Vmax
+∆Ωmax
+T
+ε
+Iseg
+Inav
+H
+G
+c
+cnav
+cexp
+w
+ξ
+λ
+ϕ
+
+environment
+time step
+robot’s state
+robot’s position
+x-coordinate of the robot
+y-coordinate of the robot
+heading angle of the robot
+image captured by the robot
+height of the image
+width of the image
+robot’s action
+linear velocity of the robot
+angular velocity of the robot
+goal position
+x-coordinate of the goal
+y-coordinate of the goal
+non-navigable areas
+policy
+transition function
+distance function
+safety distance
+maximum linear velocity
+maximum angular velocity
+maximum linear acceleration
+maximum angular acceleration
+time to reach the goal
+goal region radius
+segmented image
+navigability image
+visual horizon pixels
+subgoal search space
+cost vector
+navigation cost
+exploration cost
+weight parameter
+safe visual path
+min distance to visual horizon
+angular deviation from safe path
+
+as adversarial training (Ganin et al. 2016; Hoffman et al.
+2016, 2018; Chen et al. 2022; Saito et al. 2018; Luo et al.
+2019; Wang et al. 2020; Chen et al. 2023c; Khan et al.
+2025) align data distributions between source and target
+domains, while self-training methods (Zou et al. 2018; Mei
+et al. 2020; Hoyer et al. 2021; Zou et al. 2019; Xie et al.
+2022; Chen et al. 2019; Hoyer et al. 2022b,a; Chen et al.
+2023b) iteratively refine predictions on target domain data,
+demonstrating robustness in real-world scenarios.
+For our proposed POVNav framework, we experimented
+with various semantic segmentation techniques, including
+Transformer-based and domain-adaptive methods, to evaluate their impact on navigation performance. Field experiments revealed that while state-of-the-art segmentation models generally enhance navigability predictions, they may fail
+under significant domain shifts. To mitigate this, POVNav
+dynamically adjusts navigable and non-navigable class definitions online, improving adaptability across diverse environments. Our findings highlight the critical role of segmentation accuracy in achieving reliable and efficient navigation.
+
+3
+
+Background
+
+In this section, we introduce the assumptions, problem
+formulation, and notation system used in this work. Table 1
+summarizes the notation system, and Table 2 lists the
+mathematical symbols used in this paper.
+
+3.1
+
+Assumptions
+
+In this work, we make some reasonable assumptions to
+simplify the problem and focus on the core challenges of
+visual navigation.
+Assumption 1. Relative Position Estimation. The robot
+can estimate its relative direction to the goal. This can be
+achieved by using practical methods such as visual data
+interpretation, odometry, or a combination of visual inputs
+with inertial and/or GPS signals (if available) for improved
+accuracy.
+Assumption 2. Camera Calibration. Without loss of
+generality, a monocular RGB camera is calibrated and
+centered at the robot’s position.
+Assumption 3. Velocity Control. The robot’s motion can be
+controlled through velocity commands.
+Prepared using sagej.cls
+
+Assumption 4. Reasonable Obstacle Speeds. The dynamic
+obstacles move at speeds that allow for reactive navigation.
+
+3.2
+
+Problem Formulation
+
+Consider a mobile robot operating in an unknown
+environment E ⊂ R2 where dynamic obstacles are present.
+The robot’s state at time t is defined by its pose st ≜
+[xt , yt , θt ], where pt ≜ [xt , yt ] represents the position in the
+2D plane (or locally approximated 2D surface), and θt ∈
+[−π, π) denotes the heading angle. The robot’s observation
+space consists of RGB images captured by an onboard
+camera, i.e., It ∈ RH×W ×3 , where H and W are the
+height and width of the image, respectively. The actions or
+control commands that the robot can execute at = [vt , ωt ]
+are defined by the linear velocity vt and angular velocity ωt .
+Given a goal position g = [xg , yg ] ∈ E specified in the
+robot’s initial coordinate frame, the objective is to move to
+the goal efficiently while avoiding non-navigable areas.
+Definition 1. Non-Navigable Areas. Non-navigable areas
+Ot are defined as regions where the robot cannot traverse
+due to obstacles, safety constraints, physical limitations, or
+other user-defined criteria for selective navigation.
+
+6
+
+Journal Title XX(X)
+
+Observed Image
+
+Perception
+
+Upper Visual Horizon
+
+Goal Direction
+
+Navigable and
+Non-Navigable Class
+Definition
+
+Visual Path Planning
+Visual
+Horizon
+
+Navigability Image
+Lower Visual Horizon
+
+Segmented Image
+
+Visual Path
+
+Visual Servo Control
+
+Figure 2. System Diagram of the Proposed Framework. The system diagram illustrates the framework’s operational flow. The
+robot’s observation consists of an RGB image, which is processed by the perception module to generate a segmented image using
+semantic segmentation. Based on the robot’s traversability capabilities, navigable and non-navigable classes are defined. Utilizing
+this definition of navigability, a visual horizon is created to produce a navigability image. The robot then plans a visual path on this
+navigability image and employs visual servoing to navigate through the environment.
+
+The visual navigation problem can be formulated as
+finding a policy π, mapping the visual observation to control
+commands:
+at = π(It ).
+(1)
+The robot’s motion is subject to the following constraints:
+st+1 = f(st , at ),
+d(st , Ot ) ≥ Dsafe ,
+
+(Motion Constraint)
+(Safety Constraint)
+
+|vt | ≤ Vmax ,
+
+(Linear Velocity Bound)
+
+|ωt | ≤ Ωmax ,
+
+(Angular Velocity Bound)
+
+|vt − vt−1 | ≤ ∆Vmax ,
+
+(Linear Acceleration Bound)
+
+|ωt − ωt−1 | ≤ ∆Ωmax ,
+
+(Angular Acceleration Bound)
+
+where f(·, ·) represents the unknown transition function
+related to the robot’s dynamics, kinematics, and the
+environment, d(st , Ot ) is the distance to the nearest nonnavigable area, and other terms are self-explanatory.
+The objective is to minimize the expected time to reach
+the goal while satisfying the above constraints:
+min E[T ]
+π
+
+s.t.
+
+∥pT − g∥2 ≤ ε,
+
+(2)
+
+where T is the time to reach the goal and ϵ is the acceptable
+goal region radius. When the robot’s velocity is bounded,
+the time to reach the goal is a function of the path length
+and the robot’s velocity profile; many existing works focus
+on optimizing the path length (Anderson et al. 2018). To
+simplify the notation, we will omit the time index t in the
+following sections unless necessary.
+
+4
+
+Methodology
+
+In this section, we present a comprehensive framework for
+mapless visual navigation that enables robots to navigate
+efficiently in unknown environments using only camera
+input. Our approach combines semantic segmentation,
+horizon-based planning, and visual servoing to achieve
+robust navigation performance without relying on prior maps
+or explicit 3D reconstruction.
+Prepared using sagej.cls
+
+4.1
+
+Framework Overview
+
+The proposed framework, POVNav, consists of two main
+components: a navigability image and a visual planner.
+The navigability image offers a simple and efficient
+representation of the intricate real-world environment. The
+visual planner addresses the competing navigation objectives
+by initially identifying a Pareto-optimal visual subgoal. The
+subsequent utilization of visual path planning facilitates
+the generation of navigation features that drives the robot
+through visual servoing, as depicted in Figure 2. We describe
+these critical modules in this section.
+
+4.2
+
+Segmentation Algorithms
+
+To segment navigable regions in indoor environments, we
+adopt a self-developed surface normal-based segmentation
+method. For outdoor scenarios, we utilize the state-of-theart semantic segmentation framework Mask2Former (Cheng
+et al. 2022). This section details the surface normal-based
+approach used for generating navigability images from depth
+data.
+Let Idepth
+∈ RH×W denote the depth image at time t,
+t
+where each pixel value Idepth
+(i, j) represents the depth
+t
+measurement at image coordinates (i, j). We assume that the
+depth image corresponds to a continuous 3D scene in the
+real world. To compute the surface normal at a given pixel,
+we locally approximate the surface as a triangle using three
+adjacent points: Idepth
+(i, j), Idepth
+(i − 1, j), and Idepth
+(i, j −
+t
+t
+t
+1). The corresponding 3D points are used to compute the
+surface normal via the cross product:
+
+
+depth
+→
+−
+n i,j = Idepth
+(i,
+j)
+−
+I
+(i
+−
+1,
+j)
+t
+t
+
+
+depth
+× It (i, j) − Idepth
+(i, j − 1) .
+(3)
+t
+We then normalize this vector to obtain the unit surface
+normal:
+→
+−
+n i,j
+.
+(4)
+n
+bi,j = →
+−
+∥ n i,j ∥
+
+Pushp et al.
+
+7
+
+Goal
+
+0
+
+Start
+
+Figure 3. The planning image and its corresponding input image
+are shown. The reference frame is fixed at the bottom center
+whose x-axis is shown by red arrow and y -axis is shown by
+green arrow.
+
+The set of all unit normals defines a surface normal image
+∈ RH×W ×3 . To construct the binary navigability map
+Inorm
+t
+nav
+It ∈ {0, 1}H×W , we use a geometric heuristic: a pixel is
+considered navigable if its normal vector points upward (i.e.,
+aligned with the world z-axis):
+(
+Inav
+t (i, j) =
+
+0, if n
+bi,j ≈ (0, 0, 1)
+1, otherwise
+
+(5)
+
+Here, 0 denotes navigable (i.e., ground) and 1 denotes nonnavigable areas. In practice, a tolerance threshold is used to
+allow slight deviations from the exact vertical orientation due
+to surface irregularities and sensor noise.
+Post-processing is applied to refine the segmentation:
+small navigable regions completely enclosed by nonnavigable areas are reclassified as non-navigable, as they
+are unreachable. Additionally, any regions occluded behind
+non-navigable structures are also treated as non-navigable to
+ensure safe operation. This method is lightweight, runs in
+real-time, and provides a robust geometric prior for ground
+segmentation in structured indoor environments.
+Segmenting outdoor unstructured environments requires
+advanced methods. Transformer-based approaches have
+gained popularity, and we adopt Mask2Former (Cheng et al.
+2022) for this purpose due to its excellent performance.
+Additional technical details can be found in the original
+paper.
+
+4.3
+
+Start and Goal in Image Space
+
+In traditional robot navigation, planning occurs in real-world
+coordinates using a predefined map. However, our problem
+is different: the robot only knows the relative position of its
+goal (with respect to its current position) and must navigate
+without a map, planning its path directly in the image space.
+A key challenge in image-space planning is determining the
+start and goal positions in the image.
+The start position is typically chosen as the robot’s current
+position. However, in the image space, the robot’s current
+position is not directly observable. Computing the robot’s
+current pose in the image is challenging due to the lack of
+visual cues. To simplify this process, we assume the robot’s
+current position is at the bottom-center pixel of the firstperson-view image, as shown in Figure 3. This simplification
+is reasonable for a robot with a fixed camera setup that
+satisfies Assumption 2.
+Prepared using sagej.cls
+
+(a) Forward Goal
+
+(b) Backward Goal
+
+Figure 4. Illustration of the goal angle mapping on the image
+border. (a) Visualizes the mapping of goals located in front of
+the robot, corresponding to angles [−π/2, π/2], onto the left,
+top, and right borders of the image. Blue circles indicate sample
+POG points for the goal directions at −π/2, 0, and π/2, with the
+green circle denoting the robot’s current position. The two arrows
+illustrate example mappings for representative goal directions
+located to the left and right of the robot’s heading. (b) Illustrates
+how goals located behind the robot, with angles in (π/2, π] and
+(−π/2, −π), are projected onto an extended virtual border and
+then re-mapped to the bottom edge using a dashed projection.
+Black circles represent virtual goal locations, while blue circles
+denote actual goal projections.
+
+When the goal lies within the camera’s field of view,
+we can compute its corresponding pixel location by
+transforming the relative goal position to image space, using
+parameters obtained during camera calibration. However,
+when the goal is outside the field of view, we must identify
+a surrogate goal in the image. To do so, we transform
+the relative goal direction (with Assumption 1) in the
+real-world to the image border as they are the farthest
+observable pixels in the image. Specifically, we treat the
+bottom-center pixel (i.e., the start) as the origin of the
+image space, with the x-axis pointing upwards and the yaxis pointing to the left. To map goal angles to border
+pixels, we connect each border pixel to the origin with a
+line segment and calculate its angle relative to the x-axis.
+Through this mapping, angles in the range [−π/2, 0), 0, and
+(0, π/2] correspond to pixels along the right, up, and left
+borders of the image as shown in Figure 4(a). Note that
+the goal directions are defined with respect to the image’s
+vertical axis (x-axis as shown in Figure 3). Figure 4(b)
+illustrates the mapping of the remaining goal angles. Since
+the angles in the range (π/2, −π/2] must all be mapped to a
+single available border—the bottom border, we mirror the
+left, top, and right borders with respect to the bottom edge.
+Using this mirrored structure, we apply the same mapping
+strategy to determine the surrogate goals for each pixel
+along the extended (virtual) border. However, because these
+virtual borders do not physically exist in the image, the
+corresponding points are projected back onto the real bottom
+border, as shown by the dashed arrows in Figure 4(b).
+Interestingly, all goal directions lying on the mirrored left
+and right virtual borders (highlighted by the blue lines in
+the Figure 4(b)) are projected to a single pixel each: the
+bottom-left corner for the left virtual border and the bottomright corner for the right virtual border. While this creates
+a temporary saturation of surrogate goals at these corners,
+it does not impact navigation. As the robot rotates to align
+
+8
+
+Journal Title XX(X)
+
+with the goal direction, these angles gradually move into
+the visible region, updating their projections accordingly. We
+refer to this border-based surrogate goal as the Peripheral
+Optic Goal (POG). It is worth mentionting that, although
+this is a practical and effective mapping, alternative strategies
+could also be considered depending on the application
+context.
+
+4.4
+
+Navigability Image
+
+After defining the start and goal in the image space, we
+construct a navigability image that indicates the navigable
+and non-navigable pixels in the image, which can be used
+for image-space planning.
+Definition 2. Navigability Image. A navigability image
+W ×H
+Inav ∈ {0, 1}
+is a binary image that represents the
+navigable and non-navigable areas in the image space.
+One way to generate the navigability image is to use
+an off-the-shelf segmentation algorithm to classify each
+pixel into semantic classes. Specifically, at each time step,
+the segmentation model can take the observed image I ∈
+RH×W ×3 as the input and return a segmented image Iseg ∈
+RH×W ×C , where C is the number of segmentic classes.
+Based on the robot’s specifications (e.g., dimensions, tire
+traction, motor power), a navigability function is defined
+to classify each semantic class as navigable (denoted by
+0) or non-navigable (denoted by 1). This function can
+also be learned from data collected during robot’s past
+operation. Examples of navigable classes include grass, trail,
+and asphalt, while non-navigable classes include sky, tree,
+and building. The navigability image Inav is then obtained
+by applying the navigability function to each pixel in the
+segmented image Iseg .
+A straightforward idea is to run some path planning
+algorithms directly on the navigability image. However,
+planning on the navigability image can be challenging and
+unnecessary. Segmentation results obtained from real-world
+images are noisy, which can lead to incorrect navigability
+classification, especially in the upper part of the image
+where things are far away and appear small. Some scattered
+navigable spots in the mostly non-navigable region can
+mislead optimization-based planners to generate suboptimal
+or even infeasible paths. On the other hand, non-navigable
+spots in the mostly navigable region increase the difficulty
+of sampling-based planners. Due to this reason, sometimes
+there is no feasible path that connects the start and goal
+pixels within the navigable region. On top of that, spending
+computational resources on planning a complex path in the
+far-away region is unnecessary since it does not significantly
+affect the robot’s immediate navigation decisions but only
+provides a rough direction to the goal.
+
+4.5
+
+Visual Horizon
+
+To simplify the planning problem, we introduce the concept
+of visual horizon Figure 5. Intuitively, the visual horizon
+delineates the maximum extent of the navigable region
+surrounding the robot. By focusing on the region within the
+horizon, we can simplify the planning problem and more
+confidently generate a path that is traversable by the robot.
+Prepared using sagej.cls
+
+Figure 5. An illustration of the raw and processed navigability
+image.
+
+Definition 3. Visual Horizon. The visual horizon H is a set
+of contiguous pixels of the navigability image Inav . The upper
+boundary of the visual horizon starts from the left border and
+ends at the right border such that (a) any pixel below the
+horizon is navigable; (b) the pixels on and above the horizon
+are non-navigable; and (c) the number of navigable pixels
+below the horizon is maximized. In addition, the left and
+right image borders below the horizon are also considered
+part of the visual horizon.
+In practice, the visual horizon boundary can be computed
+by scanning the navigability image from left to right. The
+basic idea is to initialize the visual horizon to be the bottom
+row of the image and “push” each pixel on the horizon
+upwards until it reaches a non-navigable pixel. This process
+is repeated for each column of the image.
+The visual horizon provides a clear and contiguous
+boundary for the navigable region surrounding the robot.
+Now we can bypass the aforementioned challenges of
+planning on the navigability image by planning below the
+visual horizon. Noticing that the POG is typically outside the
+visual horizon, we need to find a subgoal within the visual
+horizon for planning. Since any pixel below the horizon is
+navigable, the planning problem degenerates into a naive
+problem of drawing a straight line from the start to the POG.
+Any point where the line segment connecting the start to the
+POG intersects the horizon can serve as a subgoal. However,
+this straightforward approach can lead to suboptimal paths
+where the robot keeps moving towards obstacles. To address
+this issue, we introduce a subgoal selection mechanism.
+
+4.6
+
+Pareto-Optimal Subgoal Selection
+
+Selecting a subgoal is essentially deciding the optimization
+criteria for the robot’s immediate navigation decision which
+might involve multiple conflicting objectives.
+Objective Functions: The naive approach is to
+minimize the distance to the goal, yielding a shortest
+path. To avoid bumping into obstacles, it also needs
+to add another optimization criterion that maximizes the
+clearance from obstacles. However, these two objectives are
+typically conflicting: moving towards the goal often means
+maneuvering closer around obstacles when the goal is behind
+an obstacle and thus leads to a collision risk. In addition,
+tunning the weights of these two objectives is non-trivial and
+can be time-consuming. In many scenarios, the robot may
+also get stuck in local minima.
+Our insight is that the robot does not need to move directly
+towards the goal. Instead, it only needs to move as far as
+4.6.1
+
+Pushp et al.
+
+9
+
+possible from the current location while getting closer to the
+goal and avoiding non-navigable areas. This insight leads to
+the formulation of the subgoal selection problem as a multiobjective optimization problem.
+We prioritize the safety of the robot over the other two
+objectives, so the traversability objective is not implemented
+as an optimization criterion. Instead, we implicitly optimize
+the traversability objective by constraining the subgoal to lie
+within the visual horizon.
+Definition 4. Traversability Objective. The search space of
+the subgoal G is constrained to the pixels on or below the
+visual horizon such that there exists a path connecting the
+start and the subgoal that is entirely within the navigable
+region. Formally, for each pixel (x, y) ∈ G,
+∀(x, y) ∈ G
+
+∃(x, y ′ ) ∈ H
+
+s.t. y ′ ≥ y.
+
+(6)
+
+Definition 5. Navigation Objective. Given the coordinates
+of the peripheral optic goal (xg , yg ), the navigation objective
+is to find a subgoal (x, y) ∈ G that minimizes the deviation
+cnav of the angle pointing towards the subgoal θs ≜
+arctan(y/x) from the goal angle θg ≜ arctan(yg/xg ):
+arg min cnav (x, y) = |θs − θg | .
+
+(7)
+
+(x,y)
+
+Since larger distance between two pixels in the image
+space corresponds to larger distance of the two locations in
+the real world, we can simply use the Euclidean distance
+between the subgoal and the start pixel as the exploration
+objective formally defined as follows.
+
+Lemma 1. Optimal Subgoal on Visual Horizon. The
+subgoal (x⋆ , y ⋆ ) that is Pareto-optimal with respect to the
+navigation and exploration objectives must lie on the visual
+horizon H.
+Proof. This can be proved by contradiction. Assume that
+there is a Pareto-optimal subgoal (x⋆ , y ⋆ ) that does not lie on
+the visual horizon. Draw a line starting at the robot’s current
+position (0, 0) and passing through (x⋆ , y ⋆ ). Since (0, 0)
+and (x⋆ , y ⋆ ) are both within the visual horizon, this line
+must intersect the visual horizon at some point (x′ , y ′ ). This
+point has the same navigation objective value as (x⋆ , y ⋆ )
+but a better exploration objective value, dominating (x⋆ , y ⋆ ),
+hence contradicting the assumption that (x⋆ , y ⋆ ) is Paretooptimal.
+Theorem 1 greatly simplifies subgoal selection by
+restricting the search space to the visual horizon H. Since
+H can be enumerated efficiently, this bypasses the need
+for complex optimization algorithms. We introduce the
+term Horizon Optic Goal (HOG) to denote the subgoal
+selected from the Pareto-optimal set on the visual horizon,
+distinguishing it from the POG (the goal projected to the
+image border).
+Horizon Optic Goal Selection: The remaining
+challenge is to pick a single HOG from the horizon.
+We choose a scalarization approach to convert the multiobjective optimization problem into a single-objective
+optimization problem by weighting the objectives. The
+scalarization function is defined as:
+4.6.3
+
+c(x, y) = w1 cnav (x, y) + w2 cexp (x, y),
+Definition 6. Exploration Objective. The exploration
+objective is to maximize the distance from the current
+location (i.e., the origin) to the subgoal (x, y) or equivalently,
+to minimize the following cost function:
+arg min cexp (x, y) = −∥(x, y)∥2 .
+
+(8)
+
+(x,y)
+
+Optimality and Search Space: These two objectives are often conflicting in nature. Each candidate subgoal
+(x, y) is associated with a vector of objective values c.
+For example, here we have defined two objectives c ≜
+[cnav (x, y), cexp (x, y)], which can be further extended to a
+multi-objective optimization problem with more objectives.
+Let cd be the d-th element of c.
+4.6.2
+
+Definition 7. Pareto Optimal Solutions. A subgoal (x, y)
+is better than, or dominating, another subgoal (x′ , y ′ ) if and
+only if the following conditions are satisfied:
+• Any element of c is not larger than the corresponding
+element in c′ : ∀d, cd ≤ c′d ;
+• At least one element of c is smaller than the
+corresponding element in c′ : ∃d s.t. cd < c′d .
+The set of solutions that are not dominated by any other
+solutions is called the Pareto-optimal set.
+All subgoals in the Pareto-optimal set are equally good in
+terms of the objectives and the subgoal should be selected
+only from this set.
+Prepared using sagej.cls
+
+(9)
+
+where w1 and w2 are the weights for the navigation and
+exploration objectives, respectively. The weights can be set
+based on the complexity of the environment and/or the
+user preferences. For example, if the robot is in a cluttered
+environment, the weight for the exploration objective should
+be higher to avoid obstacles.
+We adopt the scalarization approach because it is simple,
+computationally efficient, and provides a clear trade-off
+between the two objectives. However, there are two caveats
+to be aware of. First, scalariation cannot find all Paretooptimal solutions if the Pareto front is non-convex. In our
+case, the HOG only needs to be good enough for the robot
+to make the current navigation decision so finding a single
+compromised solution efficiently is preferable to exploring
+the full trade-off space. Second, if the objectives are not
+naturally comparable in scale, the weights w1 and w2 need
+to be carefully tuned or the objectives need to be normalized.
+
+4.7
+
+Efficient and Effective Servoing Features
+
+After selecting the HOG, the robot needs to take actions to
+move towards this visual subgoal – a process known as visual
+servoing (Chaumette and Hutchinson 2006). The robot’s
+motion is controlled based on visual features extracted
+from the image. The visual features should be informative
+enough to guide the robot towards the HOG while driving
+defensively to avoid non-navigable areas. Although the HOG
+is on the visual horizon of the current image and all pixels
+below the horizon are navigable, the robot should not rush
+
+10
+
+Journal Title XX(X)
+
+To ensure that the control commands respect the
+physical and operational constraints defined in the problem
+formulation (Section 3.2), we explicitly bound the control
+inputs as:
+v ∈ [−Vmax , Vmax ],
+
+Figure 6. An illustration of a visual path (green line) planned
+from the start position (green disc) to the Horizon Optic Goal
+(blue disc) with a safe boundary (blue lines) that account for the
+size of the robot and a safety margin.
+
+directly towards the HOG because the obstacles can be
+dynamic and the segmentation boundaries are noisy. To
+address this issue, we propose to generate two features: the
+proximity feature and the alignment feature.
+The proximity feature measures the distance from the
+robot to the closest pixel on the visual horizon.
+Definition 8. Proximity Feature. The proximity feature λ is
+defined as the minimum Euclidean distance from the robot’s
+current position to the visual horizon H:
+λ = min ∥(x, y)∥2 .
+(x,y)∈H
+
+(10)
+
+The proximity feature is used to control the robot’s linear
+velocity. Intuitively, the robot should move faster when the
+proximity is large and slow down when the proximity is
+small.
+The alignment feature measures the deviation of the
+robot’s heading direction from the direction pointing towards
+a safe path connecting the robot to the HOG. In Figure 6, the
+heading direction is represented by the red thick line and the
+planned path is represented in the green line.
+Definition 9. Alignment Feature. Let ξ be a sequence of
+pixels representing a safe path connecting the robot to the
+HOG. Draw a circle centered at the robot’s current position
+(0, 0) with radius R such that the circle intersects the safe
+path ξ at a single pixel (x∗ , y∗ ). The alignment feature ϕ is
+defined as the angle between the robot’s heading direction
+and the direction pointing towards (x∗ , y∗ ):
+ 
+y∗
+.
+(11)
+ϕ = arctan
+x∗
+The alignment feature is used to control the robot’s angular
+velocity. The robot adjust its heading direction to align with
+the safe path.
+Consider the robot’s state defined by the proximity feature
+λ and alignment feature ϕ. Let λ∗ represent the desired
+safe distance from obstacles and ϕ∗ = 0 represent perfect
+alignment with the safe path. We propose the following
+control law:
+v = kv (λ − λ∗ ),
+(12)
+ω = −kω ϕ,
+where v is the linear velocity, ω is the angular velocity, and
+kv , kω > 0 are control gains.
+Prepared using sagej.cls
+
+ω ∈ [−Ωmax , Ωmax ],
+
+where Vmax and Ωmax denote the platform-specific limits on
+linear and angular velocities. These bounds reflect actuation
+capabilities, mechanical constraints, and safety requirements
+of the robot.
+Accordingly, we revise the control law to enforce these
+limits using nested min and max operations:
+v = max (−Vmax , min (kv (λ − λ∗ ), Vmax )) ,
+ω = max (−Ωmax , min (−kω ϕ, Ωmax )) .
+
+(13)
+
+This formulation ensures that the control commands a =
+[v, ω] always lie within the feasible set specified in the
+problem constraints.
+In high-speed or traction-limited scenarios, coupling
+between translational and rotational motions may induce
+excessive lateral forces. Specifically, the lateral acceleration
+incurred during turning is alat = vω, which—combined with
+longitudinal acceleration along , must satisfy
+q the traction
+
+a2lat + a2long ≤
+constraint defined by the friction circle
+µg, where µ is the surface friction coefficient and g is
+gravitational acceleration. To remain within this constraint,
+the translational velocity v can be adaptively modulated
+based on the angular velocity ω and estimated surface
+traction. While this coupling is not critical in our current
+experiments which operate at moderate speeds, the proposed
+formulation can be extended to support traction-aware
+control for high-speed navigation or uneven terrain where
+dynamic feasibility becomes a dominant concern.
+To generate the visual path ξ, any efficient path planning
+algorithm can be used. We propose a simple algorithm
+that generates a path connecting the robot to the HOG
+while considering the robot’s size and a safety margin.
+The algorithm in Algorithm 1 outlines the detailed process.
+Calculating the path in this order ensures feasibility within
+a linear time constraint. At each step, a safe distance
+is maintained on both sides of the path in image space.
+This safe distance is computed by adding a safety margin
+to half the robot’s width and converting this value to
+image coordinates using the camera’s intrinsic and extrinsic
+parameters, which include the current pixel position y,
+focal length f , real-world safety margin Rsafety margin , and
+camera height from the ground h. A shift direction is then
+determined to move the path away from obstacles, ensuring
+a safe x-distance on either side of each point along the
+y-axis. If no shift direction is found, the algorithm marks
+that segment as unsafe and resumes checking lower rows.
+This results in either a fully safe path or a partial fallback
+trajectory. Note that the shift direction only needs to be
+identified once, as moving from the visual horizon or any
+navigable point to the starting point guarantees an obstaclefree path in this direction, due to the horizon’s inherent
+structure.
+Figure 7 illustrates several important edge cases in how
+the visual horizon affects planning and control.
+
+Pushp et al.
+
+11
+
+HOG
+Shifted
+HOG
+
+HOG
+
+HOG
+
+HOG
+
+(a) Normal Situation
+
+(b) Downhill
+
+(c) Uphill
+
+(d) Narrow Passage
+
+Figure 7. Illustration of various scenarios where the visual horizon influences path planning and visual servoing (blue circle shows
+the POG and green circle shows the start position in all the subfigures). (a) A typical flat-ground navigation case, where the HOG
+lies on the visual horizon, which cleanly separates navigable and non-navigable regions. (b) A downhill navigation scenario, where
+the robot sees only navigable terrain, shifting the visual horizon to the image borders and moving the HOG to the POG. (c) An uphill
+traversal, where the robot encounters only non-navigable regions, pushing the visual horizon to the bottom border of the image and
+relocating the HOG to the start position. (d) A constrained passage case, where a safe path to the HOG cannot be generated due to
+a narrow gap. The HOG is shifted to a nearby safe region, resulting in an incomplete path. The horizontal line segments shown here
+at the HOG indicate the projected robot footprint in image space, which increases in size as the robot approaches the start position.
+
+Algorithm 1 Visual Path Generation
+⋆
+
+⋆
+
+Require: Inav , (x , y )
+Ensure: Path ξ and mode
+▷ mode ∈ {safe, fallback}
+1: Initialize (x, y) ← (x⋆ , y ⋆ )
+▷ Start from HOG
+2: Set shift direction ← NULL, safe margin ← constant
+3: Initialize empty path ξ ← [ ] and mode ← safe
+4: while y ≥ 0 do
+5:
+∆x ← find safe distance in image space(y)
+6:
+xleft ← x + ∆x
+7:
+xright ← x − ∆x
+8:
+if any pixel on [xleft , xright ] is non-navigable then
+9:
+if shift direction = NULL then
+10:
+shift direction ←
+find shift direction()
+11:
+if shift direction = NULL then
+12:
+mode ← fallback
+13:
+y ←y−1
+14:
+Shift x towards the start point direction
+15:
+continue ▷ Skip adding this point and move to
+next row
+16:
+Shift x in the shift direction until all points on
+[xleft , xright ] are navigable
+Append (x, y) to ξ
+y ←y−1
+Shift x towards the start point direction
+20: Append (0, 0) to ξ
+21: R EVERSE(ξ)
+22: return ξ, mode
+17:
+18:
+19:
+
+In standard navigation scenarios (Figure 7(a)), the visual
+horizon effectively separates navigable and non-navigable
+regions in the image. HOG lies on the visual horizon, and
+a safe, obstacle-free path from the HOG to the robot’s
+current position can be generated. In such cases, Algorithm 1
+successfully returns a safe path.
+However, real-world especially off-road environments
+often introduce more complex scenarios such as steep
+terrain or perception noise. For instance, when the robot is
+descending a slope (Figure 7(b)), the camera may observe
+only navigable terrain. A similar situation may arise due to
+Prepared using sagej.cls
+
+misclassification by the segmentation model, which could
+label all regions as navigable. In such cases, the HOG is
+shifted to coincide with the POG, resembling free-space
+navigation. A valid path can still be computed in this case.
+Conversely, during uphill traversal (Figure 7(c)), the
+camera may observe only non-navigable regions, or the
+segmentation model may erroneously classify the entire
+image as non-navigable, even when navigating a flat surface.
+In such cases, the HOG collapses to the start point, resulting
+in a path of zero length. This presents a unique challenge:
+the proximity feature drops to zero (triggering a backward
+motion), while the alignment feature becomes undefined
+due to the lack of a visible path. As a fallback, we align
+the robot to the POG to maintain a consistent heading.
+However, the robot still perceives itself as being dangerously
+close to an obstacle and continues to move backward, which
+prevents it from climbing steep slopes. Alternative strategies
+such as retaining the last known safe proximity value or
+using a fixed fallback proximity could be used, but they
+risk causing collisions in ambiguous situations, such as
+when the robot is genuinely near an obstacle and cannot
+observe any navigable area. This is a key limitation of
+the current method (and existing solutions). Addressing it
+would require incorporating additional information, such as
+camera orientation or fallback policies conditioned on pitch,
+potentially through the use of a gimbaled camera system
+or dynamic viewpoint adjustment. We plan to investigate
+these enhancements in future work to further improve system
+robustness.
+Another special case arises when the goal lies directly
+behind the robot (θ = π). In this case, the start point, HOG,
+and POG may coincide, causing the alignment feature to
+become ill-defined. To prevent this, we introduce a small
+angular bias in the goal projection, ensuring numerical
+separation and allowing feature computation.
+Finally, Figure 7(d) shows a common off-road scenario in
+which thin tree branches or narrow passages obscure parts
+of the horizon, making it impossible to generate a fully
+safe path. In such cases, the proposed algorithm handles the
+failure by producing a fallback path that is partially safe,
+guiding the robot through available gaps.
+
+12
+
+4.8
+
+Journal Title XX(X)
+
+Theoretical Analysis
+
+We present theoretical analysis of the POVNav framework
+focusing on three key aspects: (1) optimality of the
+sub-goal selection, (2) control stability analysis, and (3)
+computational complexity analysis.
+4.8.1
+
+Optimality Analysis: First, we establish that our
+
+scalarization-based HOG selection approach yields weakly
+Pareto-optimal solutions regardless of the convexity of the
+objective functions.
+Definition 10. Weak Pareto Optimality. A solution (x∗ , y ∗ )
+is weakly Pareto-optimal if there does not exist another
+feasible solution (x, y) such that:
+ci (x, y) < ci (x∗ , y ∗ )
+
+∀i ∈ {1, . . . , M },
+
+The feature dynamics can be expressed using the
+interaction matrix L:
+  
+ 
+λ̇
+L
+L12 v
+= 11
+.
+(17)
+L21 L22 ω
+ϕ̇
+Substituting the control law:
+V̇ (e) = −kv (λ − λ∗ )2 L11 − kω ϕ2 L22 + cross terms.
+(18)
+For sufficiently small gains, the cross terms can be
+dominated by the diagonal terms. Since linear and angular
+velocities have positive correlation with the feature dynamics
+L11 , L22 > 0, we have V̇ (e) < 0 for e ̸= 0. Therefore, by
+Lyapunov’s direct method, the equilibrium point is locally
+asymptotically stable.
+
+where ci are the objective functions and M is the number of
+objectives.
+
+4.8.3
+
+Theorem 2. Weak Pareto Optimality of HOG. Let H be
+the visual horizon and (x∗ , y ∗ ) be the selected HOG that
+minimizes the scalarized objective:
+
+Remark 1. Time Complexity. Given an image of size
+W × H, the computational complexity of POVNav for
+one navigation step, excluding the segmentation step, is
+O(W H).
+
+c(x, y) = w1 cnav (x, y) + w2 cexp (x, y),
+∗
+
+Let us analyze each major component:
+
+∗
+
+where w1 , w2 > 0. Then (x , y ) is weakly Pareto-optimal.
+∗
+
+∗
+
+Proof. We proceed by contradiction. Assume (x , y ) is not
+weakly Pareto-optimal. Then ∃(x′ , y ′ ) ∈ H such that:
+c′nav < c∗nav
+
+and
+
+c′exp < c∗exp .
+
+Here, we use the shorthand c′nav ≜ cnav (x′ , y ′ ), c∗nav ≜
+cnav (x∗ , y ∗ ), c∗exp = cexp (x∗ , y ∗ ), and c′exp = cexp (x′ , y ′ ).
+Since w1 , w2 > 0, we have:
+w1 c′nav + w2 c′exp < w1 c∗nav + w2 c∗exp .
+This contradicts the assumption that (x∗ , y ∗ ) minimizes
+c(x, y). Therefore, (x∗ , y ∗ ) must be weakly Pareto-optimal.
+Control Stability Analysis: We now analyze the
+stability properties of the proposed visual servoing control
+law and establish conditions under which the robot will
+converge to its desired state.
+4.8.2
+
+Definition 11. Error State. Let e = [λ − λ∗ , ϕ]⊤ be the
+error state vector, where λ − λ∗ represents the proximity
+error and ϕ represents the alignment error.
+Theorem 3. Local Asymptotic Stability.
+small gains kv , kω > 0, the control law
+
+For sufficiently
+
+v = kv (λ − λ∗ )
+ω = −kω ϕ
+
+(14)
+
+ensures local asymptotic stability of the equilibrium point
+e = 0.
+Proof. Consider the Lyapunov function candidate:
+V (e) =
+
+1
+1
+(λ − λ∗ )2 + ϕ2 .
+2
+2
+
+(15)
+
+Taking the time derivative:
+V̇ (e) = (λ − λ∗ )λ̇ + ϕϕ̇.
+Prepared using sagej.cls
+
+Complexity Analysis
+
+(16)
+
+• Segmentation (External Module): A semantic segmentation model (e.g., (Chen et al. 2022; Cheng et al.
+2022) or lightweight rule-based methods) is used to
+assign class labels to each pixel. The complexity and
+runtime of this module depend on the specific model
+used and are considered external to the core POVNav
+system.
+• Navigability Image Generation: Once semantic segmentation is available, each pixel is classified as navigable or non-navigable using a navigability function
+that maps semantic classes to binary labels. This
+function may rely on a static lookup table defined
+by human input or a dynamic table generated using
+an LLM. Importantly, updates to this lookup table
+can be performed asynchronously and do not affect
+the real-time decision loop of POVNav. The binary
+segmentation lookup and visual horizon extraction
+together require O(W H).
+• Pareto-Optimal Subgoal Selection: This step involves
+scanning across the visual horizon to select a subgoal
+using scalarized multi-objective optimization, which
+takes O(W ).
+• Feature Generation: The proximity feature is computed over horizon width (O(W )), and the alignment feature requires selecting a point from the path
+(O(H)).
+• Control Command Generation: A bounded control law
+maps features to velocity commands in constant time,
+i.e., O(1).
+Since the segmentation method is modular and can be
+selected based on hardware constraints, its complexity is not
+included in the core complexity of POVNav.
+The total complexity is dominated by the navigability
+image generation and is O(W H).
+Remark 2. Space Complexity.
+POVNav is O(W H).
+
+The space complexity of
+
+Pushp et al.
+
+13
+
+The space requirements are:
+• Navigability image storage: O(W H)
+• Visual horizon storage: O(W )
+• Path and feature storage: O(W )
+Thus the total space complexity is dominated by the image
+storage: O(W H).
+
+4.9
+
+Implementation of our framework requires careful consideration of several practical aspects to ensure robust performance across different environments and scenarios. First,
+when projecting the goal to POG, we employ a smooth
+mapping function that prevents discontinuities at the image
+boundaries. This helps maintain stable robot behavior when
+the goal transitions between different regions of the image
+border.
+For navigability image generation, we utilized various
+methods: learning-based algorithms, depth-based surface
+normal segmentation, and color-based detection. Of these,
+color-based detection is lightweight enough to be implemented on a microcontroller, while depth-based surface
+normal segmentation can run on low-end devices like a
+Raspberry Pi without GPU support. The learning-based
+methods, which require GPU acceleration, are executed on a
+portable GPU machine compatible with small robots like the
+Jackal and Unitree Go1, as shown in Figure 8. To manage
+noisy segmentation, morphological operations are applied to
+remove isolated pixels and smooth region boundaries. We
+also limit the pixel adjustments to the average of recent
+movements, ensuring stability in segmentation outputs.
+The weights in the scalarization function are normalized
+based on the characteristic scale of each objective.
+Specifically, we normalize the navigation objective by
+π radians (maximum possible angle difference) and the
+exploration objective by the image diagonal length. This
+ensures that both objectives contribute meaningfully to the
+final decision regardless of image resolution or goal location.
+The control gains for linear and angular velocities are
+adapted based on the robot’s current state and environment
+characteristics. When the proximity feature indicates nearby
+obstacles, we reduce the linear velocity gain to promote more
+cautious movement. Similarly, the angular velocity gain is
+increased when sharp turns are required to follow the planned
+path.
+The radius R for computing the alignment feature is set
+dynamically based on the current proximity feature. We
+typically use R = min(λ/2, dmax ), where dmax is a maximum
+look-ahead distance. This ensures that the robot maintains
+a reasonable planning horizon while avoiding reactionary
+behavior in cluttered environments.
+To achieve efficient implementation, we use integral
+image techniques for computing the proximity feature and
+maintain a spatial index of the visual horizon points. All
+critical computations are vectorized and optimized for cache
+efficiency.
+
+5
+
+(a) Jackal
+
+Implementation Details
+
+(b) Husky
+
+(c) Unitree Go1
+
+Figure 8. Robots used for real-world experiments. The Jackal
+robot was used for indoor navigation tasks and culvert inspection
+task, the Husky robot for outdoor navigation tasks, and the
+Unitree Go1 for both indoor and outdoor tasks.
+
+both simulated and real-world environments, covering
+indoor and outdoor settings, structured and unstructured
+terrains, and different seasons such as winter and fall.
+The method is also tested with various segmentation
+techniques, under extreme conditions like after heavy
+snowfall at -7°C, forest trails, and long-range navigation
+tasks (on the kilometer scale) with different definitions
+of traversability. We also evaluate performance at various
+times of the day—morning, afternoon, and evening—to test
+the robustness of existing semantic segmentation methods
+under different lighting conditions and assess POVNav’s
+adaptability to segmentation inconsistencies. Details of these
+experiments are discussed in the following subsections.
+
+5.1
+
+Experimental Setup
+
+Simulation: To evaluate the proposed method,
+we used the Clearpath Jackal robot equipped with an
+Intel Realsense camera in the ROS Gazebo simulation
+environment. The simulation was run on an Intel Alienware
+17 laptop, configured with 32 GB of RAM and an 8 GB
+GPU, providing the necessary computational power for
+real-time processing. We implemented surface normal-based
+segmentation* and used it for all simulation experiments. The
+goal direction is determined by using the ground-truth robot
+pose and the goal pose in the world frame. This mimics
+the scenarios of perfect segmentation or reliable goal pose
+estimation.
+5.1.1
+
+Real-World: For real-world experiments, we utilized
+three different robotic platforms: Clearpath’s Jackal, Husky,
+and the Unitree Go1 quadruped as shown in Figure 8.
+All robots were equipped with an Intel Realsense D435i
+camera for RGB-D sensing and an Intel Realsense T265
+for localization (used to estimate the relative goal direction;
+this is not the only possible solution, as various other
+proprioceptive and exteroceptive sensors such as IMU,
+encoder, LiDAR etc can achieve the same objective). An
+Intel NUC with 32 GB of RAM and a 6 GB GPU was
+used as the processing unit across all platforms. This
+consistent hardware configuration ensured uniformity in
+performance evaluation across different platforms, allowing
+us to isolate the impact of environmental and task
+variations on the overall system performance. We use surface
+5.1.2
+
+Experiments
+
+In this section, we evaluate the performance of the proposed
+approach across a variety of scenarios. These include
+Prepared using sagej.cls
+
+∗ https://github.com/Dpushp/depth2surface_normals_
+
+seg
+
+14
+
+Journal Title XX(X)
+
+normal-based segmentation, an unsupervised learning-based
+method (Chen et al. 2022) and Masked-attention Mask
+Transformer (Mask2Former) (Cheng et al. 2022) for realworld experiments.
+
+5.2
+
+Comparison with Baseline Methods
+
+We evaluate the performance of POVNav against two
+baseline methods across diverse simulated environments
+and tasks. The evaluation is conducted using key metrics:
+success rate, path length, and computation time per action.
+These metrics provide a comprehensive assessment of each
+method’s efficiency and effectiveness, enabling a detailed
+comparison of POVNav’s advantages and limitations
+relative to the baselines. The experiments are designed
+to rigorously test navigation robustness in both static and
+dynamic environments under varying conditions and task
+complexities.
+Baselines: We compare the proposed POVNav
+method with a modified version of the Dynamic Window
+Approach (DWA) (Fox et al. 1997), which has been
+recently adapted to demonstrate the effectiveness of image
+segmentation for robotic navigation tasks (Chen et al. 2022,
+2023a). DWA is a widely adopted reactive planning method
+that shares navigation behavior similar to our framework.
+It restricts the search space to circular trajectories that are
+collision-free and reachable within a short time horizon.
+The original DWA evaluates multiple trajectories based on
+predefined objective functions. In the approach proposed by
+Chen et al. (2022, 2023a), motion primitives from DWA are
+projected onto the image, using a signed distance field for
+evaluation. Depth information is employed to project the
+candidate trajectories onto the images, allowing DWA to
+assess the proximity of obstacles. For collision checking, we
+assume that H represents an obstruction in the environment.
+We refer to this adapted method as the Visual Motion
+Primitive Planner (VMPP). For a fair comparison, we use
+our proposed Navigability Image as the local representation
+for this method.
+We also compare our method with a sparse optic
+flow-based reactive planner that utilizes time-to-transit (τ )
+information (Boretti et al. 2022). Inspired by biological
+systems, this approach uses monocular camera input to
+compute τ that is a visual cue derived from time-to-contact
+and applies it to steering control. The method employs robust
+vision-based navigation by leveraging τ values aggregated
+from features in the field of view. We refer to this method
+as SOFTNav (Sparse Optical Flow with Time-to-Transit
+Navigation) for showing the comparison in our evaluation.
+To address concerns regarding robustness in dynamic
+environments, we additionally include two baseline methods
+from the modular and learning-based navigation paradigms.
+As a representative modular approach, we evaluate our
+method against Model Predictive Contouring Control
+(MPCC) (Brito et al. 2019), which optimizes a sequence of
+control inputs to follow a reference path while accounting
+for dynamic constraints and obstacle avoidance. MPCC has
+demonstrated reliable performance in structured navigation
+tasks and allows us to assess the reactive capabilities of
+our method in the presence of dynamic pedestrians. To
+5.2.1
+
+Prepared using sagej.cls
+
+show the advantage of proposed method over an endto-end learning-based baseline, we compared our method
+with iPlanner (Yang et al. 2023), a vision-based goalconditioned local planner trained to produce steering and
+velocity commands directly from depth images and goal
+information. iPlanner has shown strong generalization in
+complex indoor and outdoor environments and serves as a
+strong baseline for comparing the robustness of our method
+to changes in appearance and scene layout.
+Testing Environments: We designed five distinct
+testing environments, labeled Env1 through Env5, with progressively increasing difficulty based on obstacle proximity
+to evaluate the performance of the proposed method on static
+obstacle avoidance tasks, as illustrated in Figure 9(a). In
+Env1, obstacles are spaced 3 meters apart, whereas in Env5,
+the distance between obstacles is reduced to 1 meter. This
+gradual reduction in spacing allows for a comprehensive
+assessment of POVNav’s performance across varying levels
+of obstacle density.
+To validate the method on dynamic obstacle avoidance
+tasks, we designed a corridor environment with dimensions
+of 30 meters by 6 meters, populated with pedestrians, as
+illustrated in Figure 9(b). We refer to this environment
+as Env6. The pedestrians’ movements followed the social
+force model proposed by Helbing and Molnar (1995),
+simulating realistic human-like navigation behavior. In all
+experiments, the robot’s maximum linear speed was set to
+2 m/s, and its maximum angular speed was constrained to
+π rad/s. The pedestrians moved with varying speeds, with
+a maximum speed of 1.7 m/s, adding dynamic complexity
+to the environment. This setup allowed for a comprehensive
+evaluation of the proposed method’s ability to avoid dynamic
+obstacles.
+To increase difficulty for navigation, we also designed
+a more complex simulated scenario featuring an L-shaped
+corridor, as illustrated in Figure 10. The environment
+includes 10 to 40 pedestrians to emulate realistic navigation
+conditions with bidirectional human traffic. Specifically, half
+of the pedestrians are initialized near the robot’s starting
+position and move toward the goal, while the remaining
+half begin near the goal and move toward the start. This
+configuration ensures that the robot continuously encounters
+pedestrians approaching from both directions, thereby
+increasing interaction complexity. Furthermore, pedestrian
+trajectories are intentionally directed to pass near the corner
+of the L-shaped corridor. This design choice creates partial
+occlusion in the robot’s field of view, mimicking real-world
+blind-spot scenarios and allowing us to assess the system’s
+responsiveness to suddenly appearing obstacles.
+5.2.2
+
+Results: We start the basic performance evaluation
+in simulation with relatively simple environments. We
+first compare the proposed POVNav method with VMPP
+and SOFTNav across these testing environments. In static
+environments, 20 randomly generated start and goal points
+were selected, while in dynamic environments that contains
+10 pedestrians, the same task was repeated 20 times to
+account for the variability introduced by moving obstacles.
+The results, presented in Figure 11(a), demonstrate that the
+proposed method consistently outperforms the baselines in
+all environments. The difference in performance between
+5.2.3
+
+Pushp et al.
+
+15
+
+(a) Static Environment (Env1 to Env5)
+
+(b) Dynamic Environment (Env6)
+
+Figure 9. (a) Illustrates the general layout of the simulated environment with static obstacles used for evaluating the static obstacle
+avoidance task. (b) Layout of the corridor environment with 10 pedestrians for testing dynamic obstacle avoidance. Pedestrians in
+the corridor move at different constant velocities, navigating based on the social force model.
+
+30 meters
+
+Pedestrian moving at constant speed
+Start
+
+5 meters
+
+23 meters
+
+18 meters
+
+Goal
+
+Figure 10. Layout of a more challenging environment: an
+L-shaped corridor populated with 40 pedestrians moving
+bidirectionally to simulate real-world dynamics. The zoomed-in
+inset at the lower left highlights diverse pedestrian behaviors and
+motion patterns.
+
+POVNav and VMPP becomes increasingly evident in more
+cluttered environments. The increasing gap is due to
+VMPP’s reliance on depth data for trajectory validation,
+limiting its obstacle detection to the depth sensor’s shorter
+range, whereas the visual horizon cues used by POVNav
+extend farther. This enables POVNav to take preventive
+actions for collision avoidance well before VMPP detects
+obstacles. Additionally, VMPP requires evaluating more
+motion primitives to navigate dense obstacles, making the
+set of primitives sufficient for simpler environments (Env1)
+inadequate in more complex scenarios.
+The SOFTNav method, while showing lower success rates
+in static environments due to insufficient feature detection
+in these scenarios and its lack of goal-directed navigation
+capabilities, exhibits better performance than VMPP in
+dynamic environments. This improvement underscores the
+effectiveness of the optical flow and time-to-transit concept
+in avoiding moving objects, originally inspired by studies of
+insect behavior.
+Prepared using sagej.cls
+
+In addition to evaluating the success rate, we also assess
+the path length. We randomly selected five paths for
+evaluation in a sparse environment where the gap between
+obstacles is 2 meters, denoted as WP1 to WP5. Among
+these, WP2 turned out to be obstacle-free. These paths
+include the longest diagonal goal, an obstacle-free goal,
+and intermediate point goals. Additionally, we include a
+path WP6 in the dynamic environment with three obstacles.
+Together, WP1 to WP6 represent the navigation tasks in
+the sparse environment. Given the homogeneous nature of
+the environment, these paths are sufficient for comparative
+studies. We used the same waypoints in a dense static
+environment where obstacles are spaced 1 meter apart, and
+10 pedestrians are included in the corridor navigation task
+instead of three and the start and goal points remain the
+same, as shown in Figure 9(b), representing navigation
+in the dense environment. We performed 10 successful
+trials for each path. The path length was recorded during
+the trials, and the deviation from the shortest obstaclefree path for each method is shown in Figure 11(b)
+and Figure 11(c). Our comparative analysis demonstrates
+that POVNav consistently follows a shorter path than
+both VMPP and SOFTNav, except in WP2 across both
+environments. In the sparse environment, SOFTNav deviated
+slightly in WP2 to maintain equal distance from sorounding
+obstacles detected via optical flow, while POVNav and
+VMPP followed the shortest path due to the absence of
+obstacles on the way and they did not get affected by the
+surrounded environment. Generally, SOFTNav tended to
+follow longer paths, as its goal-direction-agnostic optic flow
+detections led to unnecessary deviations. The performance
+of VMPP is highly dependent on the spacing between
+candidate motion primitives, as it involves converting the
+continuous velocity space of the dynamic window into
+discrete options. This method requires careful tuning of
+control parameters for optimal results. In densely cluttered
+environments, a large number of trajectories need to be
+evaluated; however, we used the same parameters across
+all methods that was optimized for the sparse environment.
+VMPP’s performance did not generalize well across different
+environments, as parameters optimized for Env1 did not
+yield similar results elsewhere. In contrast, POVNav
+exhibited less sensitivity to changes in the environment,
+suggesting its adaptability across various conditions without
+
+16
+
+Journal Title XX(X)
+
+14
+
+1.0
+0.8
+0.6
+0.4
+
+10
+
+POVNav
+VMPP
+SOFTNav
+
+0.2
+0.0
+
+POVNav
+VMPP
+SOFTNav
+
+12
+
+(a) Success rate vs Environments
+
+15
+12
+
+6
+
+9
+
+4
+
+6
+
+2
+
+3
+WP1
+
+WP2
+
+WP3
+
+WP4
+
+WP5
+
+WP6
+
+(b) Path length in Sparse Environment
+
+POVNav
+VMPP
+SOFTNav
+
+18
+
+8
+
+0
+
+Env1 Env2 Env3 Env4 Env5 Env6
+
+21
+
+0
+
+WP1
+
+WP2
+
+WP3
+
+WP4
+
+WP5
+
+WP6
+
+(c) Path length in Dense Environment
+
+Figure 11. Performance analysis of the proposed POVNav method compared to the baselines. (a) The x-axis represents different
+testing environments, while the y -axis shows the success rate, illustrating the comparative performance of POVNav across various
+environments. Solid lines depict the trend in success rate across all static environments, and the dashed line indicates the transition
+from static to dynamic obstacle environment. In (b) and (c), the x-axis corresponds to different navigation tasks, where WP stands
+for Waypoint, and the y -axis represents the path length differences from shortest path to goal in meters, demonstrating the efficiency
+of the proposed method compared to the baselines.
+
+1.00
+
+1.00
+
+0.75
+0.50
+0.25
+0.00
+
+0.75
+
+POVNav
+VMPP
+SOFTNav
+10
+
+20
+
+30
+
+POVNav
+MPCC
+
+0.50
+0.25
+40
+
+(a) POVNav vs. Reactive Planners
+
+0.00
+
+10
+
+20
+
+30
+
+40
+
+(b) POVNav vs. Modular Planner
+
+Figure 12. Performance evaluation of the proposed POVNav
+method in an L-shaped corridor with varying pedestrian
+densities. The x-axis indicates the number of pedestrians in
+the scene, while the y -axis denotes the success rate. (a)
+Comparison of POVNav with two reactive baselines: VMPP and
+SOFTNav, highlighting its superior adaptability under increasing
+dynamic complexity. The dashed line indicates inconclusive
+or unstable performance trends. (b) Evaluation against
+a representative modular baseline, MPCC, demonstrating
+POVNav’s robustness in dynamic environments where the goal
+is not in front of the robot.
+
+significant parameter adjustments. Interestingly, SOFTNav’s
+performance improved significantly in the dynamic dense
+environment, with its path length becoming comparable to
+that of the proposed method. This environment is ideal for
+SOFTNav, as it continuously receives features from nearby
+obstacles, allowing it to find the correct control inputs.
+This aligns with the insect-inspired navigation behavior that
+motivated the development of SOFTNav.
+Experiments in the straight corridor provided valuable
+insights into the overall performance of POVNav in
+comparison to VMPP and SOFTNav. However, in this
+setup the goal was always aligned with the robot’s heading
+direction. To further assess the robustness of each method,
+we extended with a longer L-shaped corridor environment
+in which the goal is not directly visible from the start,
+as illustrated in Figure 10. This environment demands
+not only reactive capabilities but also effective decisionmaking under partial observability and dynamic occlusion.
+We referr to these environments as DyEnv1 (10 pedestrians)
+through DyEnv4 (40 pedestrians). The robot starts at one
+end of the corridor, and the goal is placed at the far end,
+Prepared using sagej.cls
+
+approximately 30 meters forward and 20 meters to the right.
+Each method was evaluated over 20 independent trials, and
+the performance results are summarized in Figure 12.
+For a fair comparison, we tuned the parameters of the
+four methods (POVNav, VMPP, SOFTNav and MPCC) to
+perform optimally in the lowest-density setting (DyEnv1)
+and kept these parameters fixed across the higher-density
+scenarios. As shown in Figure 12(a), under these conditions,
+both POVNav and VMPP achieved good performance
+in DyEnv1. However, in this L-shaped environment, we
+started observing that SOFTNav struggled consistently due
+to its strong dependence on optical flow features, which
+are less reliable in low-texture, sparsely colored simulated
+environments. Additionally, the L-shaped geometry posed
+a significant challenge for SOFTNav, as it frequently
+misinterpreted corner features and became stuck at the turn.
+As pedestrian density increased, VMPP’s performance
+deteriorated significantly, as evidenced by its decreasing
+success rate. This degradation is primarily due to increased
+reactive latency stemming from the growing number of
+motion primitives, which were originally tuned for optimal
+performance in the low-density scenario (DyEnv1). In more
+crowded environments, the method requires denser and
+more frequent evaluation of motion primitives to ensure
+safe responses, which in turn increases computational load
+and reduces responsiveness. In contrast, POVNav maintains
+its responsiveness regardless of the number of pedestrians,
+as it depends solely on the visual horizon and imagespace features for decision-making. This lightweight design
+enables faster and more proactive reactions to dynamic
+obstacles. We capped the pedestrian count at 40, beyond
+which the scene became excessively congested. At this point,
+the performance disparity between POVNav and the other
+baselines became substantially more evident.
+POVNav consistently outperformed VMPP and SOFTNav
+due to its early and efficient decision-making strategy. Its
+computational simplicity allows for rapid evaluation of feasible paths and proactive maneuvers before entering congested
+regions. Importantly, as pedestrians enter the robot’s field of
+view, they dynamically reshape the visual horizon, thereby
+modifying the POG and influencing the visual path. When a
+pedestrian approaches closely, the proximity feature triggers
+an immediate retreat action. Remarkably, the same set of
+
+Pushp et al.
+
+17
+
+Table 3. Comparison of POVNav and iPlanner in terms of
+robustness to environmental changes. Scenario 1: iPlanner is
+trained only in a simulated forest environment and tested in
+both the forest and an unseen office environment. Scenario 2:
+iPlanner is trained in both forest and office environments and
+evaluated in the same environments. Success rates are reported
+for each case.
+
+iPlanner (Success Rate)
+(Forest-trained only)
+Forest: 95% Office: 15%
+(Forest + Office-trained)
+Forest: 100% Office: 90%
+
+Scenario
+
+POG Only
+
+POG+HOG
+
+Full System
+
+1
+2
+3
+
+100%
+0%
+0%
+
+100%
+85%
+45%
+
+100%
+100%
+80%
+
+POVNav (Success Rate)
+Forest: 100%
+
+Office: 85%
+
+Forest: 100%
+
+Office: 90%
+
+parameters tuned in (DyEnv1) remained effective across all
+subsequent scenarios, indicating the robustness and generalizability of the proposed approach under increasing dynamic
+complexity.
+We further evaluated the robustness of POVNav in
+dynamic environments by comparing it against MPCC. Note
+however, different from VMPP and SOFTNav, the MPCC
+approach relies on following a precomputed global path
+that avoids static obstacles. For a fair comparison, we
+designed this global path such that the MPCC successfully
+reaches the goal in the least crowded setting (DyEnv1),
+and used the same path across all other experiments to
+maintain consistency. MPCC outperforms reactive baselines
+like VMPP and SOFTNav in low-density settings, primarily
+due to its reliance on the global path, which inherently
+steers the robot away from walls and other static structures.
+However, as pedestrian density increases, the optimization
+overhead in MPCC becomes more pronounced. The need to
+replan more frequently in cluttered scenes leads to increased
+computational delays and, consequently, a noticeable decline
+in success rate, as shown in Figure 12(b).
+Lastly, we analyzed the advantages of POVNav over a
+learning-based approach by comparing it with iPlanner, a
+recently proposed method with publicly available training
+and evaluation code. We first trained iPlanner in a simulated
+forest environment and evaluated both iPlanner and POVNav
+in this training environment, as well as in a previously unseen
+indoor office environment to assess generalization. Next,
+we incorporated the office environment into the training
+dataset and retrained iPlanner. Both methods were then
+tested again in both environments to evaluate improvements
+in adaptability. To adapt to iPlaner and make the comparison
+fair, both methods used depth image for perception.
+For each environment, we randomly sampled 20 goal
+locations for evaluation. In the office environment, we
+excluded goal configurations where U-shaped obstacles
+entirely blocked the path between the start and goal, as
+neither method (POVNav being purely local planners) could
+handle such topologically infeasible cases. The performance
+results from these experiments are summarized in Table 3.
+It is clearly evident from Table 3 that the learning-based
+planner, iPlanner, exhibits a significant drop in performance
+when tested in an unseen environment especially if there
+is a domain shift. Specifically, when trained solely in
+the simulated forest environment, iPlanner achieves a high
+success rate of 95% in the forest, but its performance
+deteriorates sharply to 15% when deployed in the office
+Prepared using sagej.cls
+
+Table 4. Success Rate Comparison in Ablation Studies.
+1.Obstacle-free Navigation, 2.Static Obstacle Avoidance and 3.
+Dynamic Obstacle Avoidance.
+
+Table 5. Path Length Comparison in Ablation Studies. All
+waypoints are 32 meters apart in obstacle-free, static, and
+dynamic environments. The obstacles are 2 meters apart in
+static environment and the dynamic environment includes 6
+pedestrians.
+
+Scenario
+
+POG Only
+
+POG+HOG
+
+Full System
+
+1
+2
+3
+
+32m
+N/A (Fail)
+N/A (Fail)
+
+32m
+37.16m
+34.21m
+
+32m
+38.95m
+36.21m
+
+environment. This highlights a key limitation of end-toend learning-based methods, their sensitivity to distributional
+shifts and lack of generalization when confronted with
+novel or structurally different environments. In contrast,
+POVNav maintains strong performance across both training
+and testing environments, achieving 100% success in the
+forest and 85% in the office setting.
+Furthermore, when iPlanner is retrained with data
+from both forest and office environments, its performance
+improves to 90% in the office, matching the performance
+of POVNav. However, this improvement comes at the cost
+of increased data collection and retraining effort. POVNav,
+on the other hand, achieves similar performance without
+requiring any additional fine tunning of parameters, allowing
+the system to dynamically adjust its behavior based on
+environmental conditions or task-specific requirements. The
+modular and interpretable nature of POVNav offers a
+compelling trade-off between adaptability and transparency,
+especially in safety-critical applications.
+We also evaluated the computational time of POVNav
+and the baseline methods. POVNav demonstrated superior
+efficiency, with an average of 0.04 seconds per action,
+compared to 0.22 seconds for VMPP and 0.14 seconds for
+SOFTNav. This improvement stems from POVNav’s imagebased planning, which eliminates the need for evaluating
+multiple 3-D trajectories like VMPP, and is faster than
+SOFTNav’s optical flow and time-to-transit computations,
+making it ideal for real-time applications.
+
+5.3
+
+Ablation Studies
+
+We conduct ablation studies across three scenarios in a
+simulated environment to evaluate the impact of different
+components in our visual navigation framework: (i) obstaclefree navigation, (ii) navigation while avoiding static
+obstacles, and (iii) navigation while avoiding dynamic
+obstacles. Each experiment is designed to isolate and test the
+contribution of specific features:
+• POG: We assess how the absence of HOG and visual
+path affects the robot’s performance in navigating
+complex or cluttered areas.
+
+18
+
+Journal Title XX(X)
+
+POG
+
+P1
+
+POG
+
+HOG
+
+P2
+
+(a) Map
+
+(c) POG, HOG and ϕ
+
+(b) POG and HOG
+
+(d) Angular Control
+
+Figure 13. Shows the role of different components in POVNav. The x-axis in all the subplots represents time and y -axis represents
+error value. (a) Dashed line shows the obstacle detection status (non-zero value means obstacle detected). (b) Shows the effect of
+visual path planning on obstacle avoidance. (c) Shows ϕ controls ω . (d) Shows the effect of λ on v .
+
+POG
+HOG
+
+Figure 14. Illustration of obstacle-free goal navigation with
+POVNav (λ = λ0 ) for two goal directions (π to 0, −π to 0). The
+discontinuity in the plot represents the change in navigation goal.
+θ is the heading angle of the robot.
+
+• POG+HOG: The importance of HOG for robust
+visual navigation is evaluated, focusing on the success
+rate during static and dynamic obstacle avoidance
+tasks.
+• Visual Path: We compare navigation performance
+with and without the visual path planning component.
+A comparison of success rates across different navigation
+scenarios, highlighting the distinct roles of POG, HOG, and
+the visual path in ensuring successful navigation is shown
+in Table 4. In an obstacle-free environment, all methods
+successfully reached the goal, indicating that POG alone can
+effectively map the global goal onto the image boundary and
+guide the robot without obstacles. However, in environments
+with obstacles, the POG-Only method had a 0% success rate,
+as it lacked the capability to avoid obstacles. This suggests
+that, while POG alone can be sufficient for guiding the
+robot in open spaces, it requires additional support for safe
+navigation in cluttered environments. Table 5 shows that all
+methods followed the same path in the absence of obstacles,
+indicating that HOG and the visual path are not required in
+obstacle-free navigation tasks. When HOG was combined
+with POG, the success rate increased to 85% in static and
+45% in dynamic environments, demonstrating that HOG
+provides a local goal perspective that optimizes exploration
+and navigation objectives and help avoiding obstacles by
+deviating from POG. This supports the hypothesis that HOG
+aids in navigating complex environments by helping to avoid
+nearby obstacles. Adding the visual path further improved
+the success rate, achieving 100% in static and 80% in
+dynamic environments. This improvement is attributed to the
+visual path’s ability to add a layer of safety by maintaining
+a safe distance from obstacles, even if this requires deviating
+from the local goal. However, this also led to an increase in
+path length, suggesting a trade-off between path efficiency
+and safety in more challenging navigation tasks.
+Prepared using sagej.cls
+
+By analyzing these cases, we demonstrate that each
+component plays a crucial role in enhancing the success rate
+of navigation, particularly in scenarios involving static and
+dynamic obstacle avoidance. To gain further insight into the
+framework, we recorded and analyzed the behavior of all
+visual features during both obstacle-free and obstacle-rich
+navigation tasks.
+To see the role of POG, we performed an experiment in
+which we define different goals in random directions of an
+obstacle-free, simulated environment. The results are shown
+in Figure 14 where the robot aligns itself towards the goal
+direction and then it maintains the heading angle until it
+reaches the goal. Note that θ, POG, HOG, ϕ overlaps except
+for two intervals (π to π/2, −π to − π/2) as a result of
+the non-uniform mapping of the goal direction on the image
+border. This shows that the implemented mapping function
+maintains the correlation of POG with θ. In our case, the
+POG updates itself with the same value during that interval.
+This also shows that the POG itself is able to navigate the
+robot in an obstacle-free environment and can be considered
+as a global guide in POVNav.
+We introduce obstacles into the environment to evaluate
+how POG, HOG, and Visual Path Planning collaboratively
+guide the robot to its goal while avoiding obstacles.
+Figure 13(a) illustrates the environment setup, with specified
+start and goal positions, as well as visible obstacle locations.
+Figure 13(b) highlights the sub-goal selection process, which
+effectively balances the trade-off (indicated by the green
+region) between two conflicting objectives, guiding the robot
+towards the goal. The alignment of HOG with POG enhances
+traversability by maximizing the robot’s ability to navigate
+through complex spaces. Once a sub-goal is chosen, the
+robot interacts dynamically with the environment, using
+visual path planning to actively avoid obstacles, as shown
+in Figure 13(c). Finally, Figure 13(d) presents the calculated
+control inputs derived from alignment features, providing a
+clearer view of the framework’s complete operation.
+
+5.4
+
+Robustness in the Real-world
+
+We conducted the following experiments to evaluate the
+robustness of the proposed method in real-world settings:
+• Navigation with noisy segmentation methods.
+• Point-to-point navigation in different scenarios.
+• Navigation in dense forest trails.
+• Navigation under extreme weather conditions.
+• Kilometer-scale navigation leveraging visual-inertial
+odometry, with GPT-3.5 utilized as a navigability
+parser.
+
+Pushp et al.
+
+19
+
+(a) Real World: POG and HOG
+
+(b) Real World: HOG and Visual Path
+
+Figure 15. Real-world navigation task. (a) Sub-goal selection with noisy segmentation, illustrating the effect of segmentation noise
+on sub-goal stability. (b) Obstacle avoidance, where frequent fluctuations in HOG highlight segmentation noise. The Visual Obstacle
+Avoidance (VOA) regions, indicated between HOG and POG as well as between POG and alignment features, reflect the system’s
+adaptive response to maintain navigability despite noise.
+
+Avoided
+Tables and Chairs
+Goal
+
+Goal
+Avoided Pedestrians
+Start
+
+Figure 16. Illustration of Jackal robot in the real-world navigating around static obstacles such as walls, tables, and chairs, as well as
+dynamic obstacles like pedestrians. The elevation map is used solely for visualizing the path followed and the obstacles encountered.
+
+(a) t1
+
+(b) t2
+
+(c) t3
+
+(d) t4
+
+Figure 17. Shows the POVNav planning image from timestamp t1 to t4 during human pedestrians avoidance. From (a) to (d), the
+change in visual path (shown in green color) in real-time with changing obstacle positions shows the active visual path planning of
+POVNav to avoid dynamic obstacles in real-world.
+
+5.4.1
+
+Navigation with Noisy Segmentation Techniques
+Real-world image segmentation methods often exhibit
+inconsistencies in predicting precise boundaries between
+segments. This challenge is observed across various
+segmentation approaches, including color-based, depthbased, surface normal-based, and deep learning-based
+methods, all of which introduce noise in boundary pixel
+prediction in the real-world. These inaccuracies impact the
+exploration objective of POVNav, leading to significant
+fluctuation in the HOG. Nevertheless, the proposed
+framework’s active path-planning approach effectively
+mitigates these fluctuations.
+
+As shown in Figure 15(a), the POG path remains relatively
+smooth, while HOG exhibits noticeable instability due to
+segmentation noise. The POVNav framework mitigates these
+fluctuations by planning a visual path but only executing the
+initial action. This selective approach reduces the impact of
+Prepared using sagej.cls
+
+noise on HOG calculations, as illustrated in Figure 15(b).
+Even with noisy segmentation, Figure 16 demonstrates the
+Jackal robot’s ability to navigate between waypoints and
+avoid obstacles. Snapshots at four distinct timestamps in
+Figure 17 reveal the robot’s pedestrian avoidance behavior
+as the path dynamically updates.
+Despite segmentation noise, the robot consistently reaches
+its goal in most trials, highlighting POVNav’s robustness in
+noisy environments.
+5.4.2
+
+Point-to-Point Navigation in Different Scenarios
+We conducted rigorous real-world navigation experiments
+in four distinct scenarios to further test the navigation
+robustness:
+
+• A to B: Transition from on-road to off-road conditions.
+• C to D: Navigation through sparse obstacles.
+
+20
+
+Journal Title XX(X)
+
+B
+D
+
+Tree 4
+
+Pole
+
+Goal
+
+Tree 3
+
+Goal
+
+t5
+
+Tree 2
+
+C
+
+A
+
+t4
+
+Navigation Task 1
+On-road to Off-road
+
+t5
+
+t4
+
+Navigation Task 2
+Sparse Trees
+
+Grass
+Uneven Surface
+
+t3
+
+Road
+
+Grass
+Uneven Surface
+
+t2
+
+Grass
+Uneven Surface
+
+t3
+
+Tree 1
+t2
+
+t1
+Start
+
+Start
+
+t1
+
+t1
+
+t2
+
+t2
+
+t3
+
+t3
+
+t4
+
+t4
+
+t5
+
+t5
+
+(a) On-road to Off-road Transition
+
+t1
+
+(b) Avoiding Sparse Obstacles
+
+Figure 18. Visual representation of two distinct navigation tasks in real-world environments. In the top left, a third-person view
+displays the environment with marked start and goal points. A 2.5D elevation map is included to provide context on the terrain and
+the robot’s navigation path. Along the path, five key points are selected, each representing the robot’s state at different timestamps.
+For each state, four images are presented sequentially from left to right: the RGB image perceived by the robot, the segmented
+image generated by Mask2Former (Cheng et al. 2022), the binary segmented image defining navigability, and the path planned by
+the robot.
+
+• E to F: Selective navigation where the robot must
+avoid grass while heading towards the goal.
+• G to H: Navigation through dense forest terrain.
+Each experiment was conducted five times under real-world
+conditions to evaluate the proposed method’s consistency
+and reliability across diverse environments. Performance was
+measured through three key metrics: success rate, the number
+of human interventions required per run, and the frequency
+of redefined navigability criteria. Table 6 summarizes the
+results, showing stable performance and adaptability of the
+proposed method across varied navigation challenges. As no
+changes in navigability criteria were observed across the five
+runs in each environment, this measure is not included in the
+table.
+As shown in Table 6, the robot successfully navigated
+between terrain types (A to B) without interventions.
+In sparsely cluttered environments (C to D), the system
+demonstrated consistent performance, requiring only one
+human intervention due to segmentation errors, underscoring
+its robustness in low-density scenarios. During selective
+Prepared using sagej.cls
+
+navigation tests (E to F), the robot achieved a high success
+rate with no human input, indicating its efficiency in targeted
+navigation tasks. However, dense forest navigation (G to H)
+presented greater challenges, resulting in a lower success
+rate with more frequent interventions. This was primarily
+due to limitations in the segmentation method (Cheng
+et al. 2022), which struggled to accurately interpret the
+forest environment’s semantics. Repeating this experiment
+with a domain-adaptive method (Chen et al. 2022) trained
+on a small deployment dataset led to a 100% success
+rate, suggesting that Mask2Former (Cheng et al. 2022)
+underperformed compared to domain-adaptive approaches
+like CALI (Chen et al. 2022). A representative autonomous
+navigation run is visually presented in Figure 18 and
+Figure 19. We have used both the robots - Husky and Unitree
+Go1 to accomplish this task.
+Navigation in Dense Forest Trails This experiment
+aims to validate the performance of POVNav and
+examine how segmentation methods behave in dense forest
+5.4.3
+
+Pushp et al.
+
+21
+
+F
+
+Goal
+
+H
+
+Goal
+t5
+
+t5
+
+E
+
+Water
+
+Navigation Task 3
+Urban Trail
+
+t4
+
+t3
+
+Bridge
+
+G
+
+t4
+
+Navigation Task 4
+Forest Trail
+Right Trail
+
+Water
+
+t2
+
+Dense Forest
+t3
+
+t2
+
+t1
+
+t1
+
+Start
+
+Dense Forest
+
+Start
+
+t1
+
+t2
+
+t3
+
+t4
+
+t5
+
+(a) Selective Navigation Behavior
+
+(b) Navigating through Dense Forest Trail
+
+Figure 19. Visual representation of two distinct navigation tasks in real-world environments. In the top left in (a) and top right in (b),
+a third-person view displays the environment with marked start and goal points. A 2.5D elevation map is included to provide context
+on the terrain and the robot’s navigation path. Along the path, five key points are selected, each representing the robot’s state at
+different timestamps. For each state, four images are presented sequentially from left to right: the RGB image perceived by the robot,
+the segmented image generated by Mask2Former (Cheng et al. 2022), the binary segmented image defining navigability, and the
+path planned by the robot.
+
+Figure 20. Illustration of Navigation task in unstructured environments. The green marker indicates the robot’s starting position,
+while the blue markers denote the goal positions. The purple marker represents the robot’s state in the image space, and the orange
+lines depict the planned safe paths.
+
+environments. Specifically, we assess whether these methods
+yield consistent results in such settings and evaluate
+POVNav’s capability to handle segmentation inaccuracies.
+
+Prepared using sagej.cls
+
+Two trails were selected within a dense forest, as shown
+in Figure 20, with a goal point set 30 meters away. The
+robot’s planned paths at five different waypoints are captured
+
+22
+
+Journal Title XX(X)
+
+(a) Road = Navigable; Snow ̸= Navigable
+
+(b) Road ̸= Navigable; Snow = Navigable
+
+(c) Road = Navigable; Snow = Navigable
+
+Figure 21. Navigation under extreme weather conditions. The robot is demonstrating the selective navigable behavior using
+POVNav. In (a), snow is designated as non-navigable while the road is navigable. In (b), snow is considered navigable and the
+road is non-navigable. In (c), both snow and road are treated as navigable.
+
+Table 6. Success Rate and Human Intervention Analysis in
+Different Scenarios
+
+Scenario
+
+Success Rate (%)
+
+Interventions
+
+A to B
+C to D
+E to F
+G to H
+
+100%
+100%
+100%
+80%
+
+0
+1
+0
+2
+
+in snapshots for each trail. Each trail was tested five times.
+On Trail 1 (top trail), the robot consistently reached the
+goal in all trials. However, on Trail 2 (bottom trail), the
+robot failed to reach the goal in two out of five trials
+due to insufficient segmentation accuracy on the more
+challenging terrain. While improving segmentation accuracy
+is beyond the scope of this study, we anticipate that the
+proposed method’s performance would further improve with
+advancements in segmentation techniques. This experiment
+highlights the challenges of accurate segmentation in dense
+forest environments, where existing methods often struggle
+to identify navigable regions effectively. We observed that
+domain-adaptive methods outperform “segment anything”
+techniques trained on large, general datasets in these
+complex terrains.
+5.4.4
+
+Navigation under Extreme Weather Conditions
+We evaluated the performance of the proposed method
+in a navigation task following a heavy snowfall. The
+objective of this experiment was to assess the readiness
+of POVNav for real-world applications, particularly in
+situations that demand greater flexibility and adaptability
+in response to environmental challenges. Since, there are
+only black and white pixels in the scene, we used colorbased segmentation method for this experiment. During
+the navigation tasks, we observed sudden drift in the
+visual odometry; however, this did not compromise the
+execution of the navigation task. The local observations
+utilized by POVNav effectively guided the robot, allowing
+it to handle localization drift without significantly impacting
+safety, although the accuracy of reaching the goal have
+been affected. POVNav exhibits the capability to selectively
+navigate over snow or avoid it, depending on the
+conditions. The modular architecture of POVNav allows for
+modifications to the navigability definition vector, which is
+employed to generate the Navigability Image. This flexibility
+facilitates the demonstration of selective navigation behavior
+Prepared using sagej.cls
+
+by altering the navigability definitions. Figure 21 illustrates
+three scenarios in which the robot navigates using distinct
+definitions of navigability vector.
+5.4.5 Kilometer-scale Navigation leveraging visualinertial odometry and GPT-3.5 as a navigability parser
+
+We conducted a kilometer-scale navigation task where
+the Husky robot was given a direction to go defined in
+the local frame and we manipulated the direction clue at
+difficult places where a local planner typically suffers. This
+experiment aimed to address two primary questions: (1)
+How do human-defined navigability definitions align with
+complex, real-world environments? (2) How can changing
+navigability definitions be handled, given the potential
+inaccuracies of segmentation methods?
+In our observations, POVNav generally performed well
+when segmentation models accurately classified segments,
+and when human-defined navigable classes were adequate,
+especially in structured environments like urban trails and
+paved roadways. However, we found that navigability
+definitions need to be updated when transitioning between
+different environments, as illustrated by the color-coded
+paths in Figure 22. For example, navigating on a sidewalk
+requires avoiding grass, whereas in an urban forest
+environment, a bridge crossing water or mud might be
+preferable over grassy shortcuts, which can be challenging
+even for humans to recognize those grass on top of mud or
+water as non-navigable. In such cases, the shortest path may
+lead the robot over grass; however, human-like navigation
+would prefer the bridge.
+POVNav facilitates such adaptive navigation by allowing
+manual selection of navigable classes to achieve desired
+behaviors. To further explore automation in dynamic
+navigability, we tested GPT-3.5 as a navigability parser
+during environment transitions, with surprising results. In
+Figure 22, due to segmentation model inaccuracies, the
+path was initially labeled as “sand” or “earth.” With these
+classes designated as non-navigable in the urban trail
+context, the robot was unable to plan a viable path. When
+provided with these classes, GPT-3.5 suggested a revised
+navigable set including “path” and “sand” based on context
+(see timestamps t1 and t2 in Figure 22). At t3, when
+the robot identified “rock” and “stone” classes that also
+hindered goal alignment, GPT-3.5 adapted the navigable set,
+considering these classes as traversable in the context of
+“urban trails, dense forest paths, open spaces, and roadways.”
+
+Pushp et al.
+
+23
+
+P1
+
+Dense Forest Trail (180 m)
+Sparse
+Forest
+Trail (130 m)
+
+t1
+
+t1
+t2
+
+Urban
+Trail (80 m)
+
+Navigability Definition Changed
+
+Road (900 m)
+
+t2
+P2
+P1
+Navigability Definition Changed
+
+t3
+
+t3
+
+Navigability Definition Changed
+P2
+
+Figure 22. Illustration of KM-Sclae navigation task. On the left, the path travelled by the robot are shown on the map with different
+colors. From point P1 to P2 the path in while color, we show the elevation map and path travelled by the robot on that map, shoen
+in the middle. At time t2, t2 and t3, the robot encountered that the naviaglity definitions are not suffient and hence used GPT-API to
+correct it. The segmented image, image after parsing navigability and the planning image (from left to right) are shown in the right
+most column. For each timestamp, the images before calling the GPT-API and after are shown.
+
+This adaptive change in visual path planning is evident in
+Figure 22.
+
+5.5
+
+POVNav for Solving Real-World Problems
+
+The proposed POVNav framework demonstrates significant
+potential in addressing practical challenges in realworld applications. This section highlights one such
+application—automated culvert inspection for infrastructure
+maintenance—and illustrates how POVNav contributes to
+its solution. Culvert inspection involves navigating through
+narrow, often constrained environments where traditional
+GPS signals are unavailable, and terrain complexity poses
+considerable challenges. Additionally, the entry size of
+culverts can restrict the deployment of commonly used
+robots, necessitating the use of a compact, low-power robot
+with limited sensing and computational resources. These
+constraints make POVNav particularly well-suited for this
+task, as it is computationally efficient and allows for flexible
+integration with various segmentation techniques according
+to the available computational resources.
+Prepared using sagej.cls
+
+POVNav’s vision-based approach supports efficient culvert navigation by utilizing real-time semantic segmentation to identify and follow navigable regions. One of the
+core advantages of our approach is the ability to redefine
+“navigability” manually, enabling customization of semantic
+segmentation models to the unique environment of a culvert. This adaptability ensures that the robot can accurately
+interpret and traverse safe surfaces. Additionally, POVNav
+can leverage large language models (LLMs) for enhanced
+reasoning and contextual adjustments to navigability definitions, enabling improved decision-making in dynamic or
+poorly defined environments where conventional semantic
+labels may be insufficient. Furthermore, LLMs can assist in
+detecting and analyzing structural defects within the culvert.
+This integration of semantic segmentation with LLMenhanced reasoning bolsters the system’s robustness,
+enabling POVNav to perform effectively in challenging realworld scenarios like culvert inspection. As illustrated in
+Figure 23, we deployed POVNav on a robot within a real
+culvert with a narrow entryway. We evaluated two segmentation techniques—surface normals and Mask2Former (Cheng
+
+24
+
+Journal Title XX(X)
+
+Figure 23. Illustration of the culvert inspection task. The top row shows the robot’s pose, its traveled path within the culvert, and
+the RGB-D point cloud captured at the current timestamp. The middle row begins with an image of the experimental setup, where
+the culvert has a 30-inch radius. The modified robot, equipped with two LED lights for enhanced visibility, was outfitted with a LiDAR
+sensor, though it was not used in these experiments. The following three images display surface normals, segmentation results
+from (Cheng et al. 2022), and the planning image, respectively. In the planning image, the left and right safe boundaries are marked
+to demonstrate the effectiveness of the POVNav framework. The bottom row shows third-person views of the robot at four different
+timestamps.
+
+et al. 2022). The Mask2Former method produced incorrect
+semantic labels within the culvert environment, likely due
+to the absence of similar scenes in its training data. Nevertheless, by adjusting the navigability criteria, we successfully directed the robot through the culvert. For instance,
+we defined navigable regions to include classes such as
+wall, floor, person, earth, ground, water, rock, stone, path,
+stairs, land, and soil. Interestingly, although the segmentation model incorrectly labeled certain regions as “person,”
+our adjustable navigability framework allowed POVNav to
+complete the navigation task effectively by interpreting this
+label as part of the navigable environment.
+Supplementary Video: A video demonstrating the proposed
+method in simulation and real-world environments is
+available at: https://youtu.be/wVwIQdXpUM8
+
+5.6
+
+Limitations and Future Work
+
+While POVNav demonstrates promising results in visual
+semantic navigation, several limitations present opportunities for future enhancement.
+The use of a monocular camera is central to POVNav’s
+lightweight design, making it deployable on low-compute
+hardware like microcontrollers. However, this configuration
+lacks the ability to infer depth, restricting environmental
+understanding to segmented classes without explicit obstacle
+structure information. Consequently, POVNav heavily relies
+on the segmentation method’s accuracy for obstacle detection and avoidance. We can integrate depth sensors or utilize
+Prepared using sagej.cls
+
+stereoscopic vision to enable richer environmental context,
+enhancing both obstacle detection and the robustness of path
+planning.
+When the robot traverses steep inclines or declines,
+the camera’s roll and pitch can alter its field of view,
+potentially limiting its ability to capture necessary features
+for feasible path identification and directly affecting the
+exploration objective of the POVNav. In such cases, the
+camera may predominantly capture non-navigable surfaces,
+compromising path planning efficacy. A possible direction
+to solve this problem is incorporating IMU data to account
+for roll and pitch effects could maintain a stable navigable
+viewpoint, helping ensure continuous feature availability in
+challenging terrains.
+While POVNav’s paths are efficiently planned in visual
+space, they may not always be dynamically feasible in realworld scenarios due to the robot’s kinematic and dynamic
+constraints. By learning feasible trajectories in the images
+space that consider both the robot’s dynamics and the
+physical properties of its surroundings, future iterations of
+POVNav could yield paths that are better aligned with realworld motion constraints.
+Currently, navigability definitions rely on human input
+or naive GPT-3.5 API utilization, which may not fully
+capture environmental variability. Segmentation methods are
+imperfect and can dynamically reclassify the same terrain
+across different times of day. Our extensive experimentation
+revealed that navigability definitions shifted within the
+same environment throughout the day. For instance, in
+
+Pushp et al.
+
+late afternoon, shadows cast by tree branches on the
+ground were occasionally detected as poles, categorizing
+them as non-navigable obstacles. This observation highlights
+the impact of temporal lighting changes on segmentation
+accuracy. Future advancements could explore the integration
+of physical properties, such as IMU-based vibration analysis
+over varied surfaces, to assess factors like friction and ground
+consistency. These attributes could provide additional
+context, helping the system adaptively refine traversability
+definitions and thereby improve navigation robustness.
+These enhancements present a path forward for refining
+POVNav into a more versatile and resilient navigation
+framework, particularly suited to environments with dynamic
+conditions and constrained compute resources.
+Finally, while the current control law ensures bounded
+velocities, it does not explicitly enforce dynamic feasibility
+under traction-limited conditions. In high-speed navigation
+scenarios, especially on low-friction or uneven surfaces,
+the combined lateral and longitudinal acceleration can
+exceed the platform’s traction capacity, resulting in loss of
+control. As a future direction, we plan to incorporate a
+traction-aware control mechanism into POVNav. This would
+involve adaptively modulating the translational velocity v
+based on the commanded angular velocity ω and estimated
+friction limits, thereby enforcing the dynamics constraint
+during motion planning and control. This extension will
+allow POVNav to operate safely and robustly at higher
+speeds and in more challenging terrain, improving real-world
+deployment capabilities.
+
+6
+
+Conclusion
+
+This paper presents a visual semantic navigation system,
+POVNav, designed to empower autonomous robots with
+robust navigation capabilities in diverse real-world environments. By leveraging semantic segmentation to distinguish
+traversable regions from obstacles, POVNav enables robots
+to achieve near-human-like navigation behavior, essential for
+complex and dynamic applications. The framework’s modular design integrates the flexibility of end-to-end imageto-action mapping without the need for specialized or
+semantic maps, making it both adaptable and efficient. It
+further allows for the integration of advanced learningbased semantic understanding techniques while introducing
+mechanisms to mitigate errors when confronted with outof-distribution data—a common occurrence in real-world
+deployment. Additionally, while POVNav is compatible with
+sophisticated segmentation techniques, it retains the flexibility to operate with simpler segmentation methods, such as
+color-based or surface-normal approaches, underscoring its
+broad applicability. Also, each component of POVNav can
+be further refined or replaced to enhance its suitability for
+increasingly challenging scenarios, underscoring its versatility and practical value.
+We conducted extensive simulation and field experiments
+to validate each component of POVNav. In simulations,
+the proposed system demonstrated superior performance
+compared to existing methods, excelling in success rate,
+path length efficiency, computational speed, and resilience
+to dynamic obstacles. Field experiments were performed
+in varied settings—indoor navigation with a Jackal robot
+Prepared using sagej.cls
+
+25
+
+utilizing noisy surface-normal segmentation, which tested
+POVNav’s capacity for waypoint navigation and obstacle
+avoidance under a highly unstable visual horizon. Outdoor
+trials, conducted with both Husky and Unitree Go1 robots,
+included navigating harsh weather conditions with minimal
+drift or instability, despite the extreme cold affecting the goal
+direction sensors. These experiments employed basic colorbased segmentation to navigate stark black-and-white visual
+environments, illustrating the method’s adaptability.
+We performed long-range navigation in urban trails, sparse
+and dense forest trails, structured roads, and populated
+campus pathways. These tests were conducted across
+different times of day, seasons (fall and winter), and
+varying environmental conditions, revealing the dynamic
+nature of current state-of-the-art segmentation models. Our
+work highlights the potential of vision-language models to
+dynamically adjust navigability definitions in response to
+shifting environmental semantics, a capability that bridges
+the limitations of conventional segmentation modules. Frame
+rates for segmentation during these experiments varied
+between 1 Hz and 30 Hz, with POVNav successfully
+adapting to these constraints. The reliability demonstrated
+across more than 100 successful real-world navigation trials,
+spanning different robots, environments, and segmentation
+methods motivated us to extend this approach to real-world
+applications such as culvert inspection.
+
+7
+
+Acknowledgement
+
+The authors extend their appreciation to Md. Al-Masrur
+Khan and Mahmoud Ali for their assistance in conducting
+the hardware experiment in the wild. Additionally, the
+authors sincerely thank all anonymous reviewers for their
+invaluable and constructive feedback, which has significantly
+contributed to the improvement and enhanced quality of this
+manuscript.
+
+8
+
+Declaration of Conflicting Interests
+
+The authors declared no potential conflicts of interest with
+respect to the research, authorship, and/or publication of this
+article.
+
+9
+
+Funding
+
+The authors disclosed receipt of the following financial
+support for the research, authorship, and/or publication of
+this article. This work was partially supported by (1) NSF:
+CAREER: Autonomous Live Sketching of Dynamic
+Environments by Exploiting Spatiotemporal Variations
+(grant no 2047169); (2) U.S. Army Research Office and
+was accomplished under Cooperative Agreement Number
+W911NF-22-2-0018: Scalable, Adaptive, and Resilient
+Autonomy (SARA); (3) U.S. Army Engineer Research and
+Development Center (grant no W912HZ2320003, subaward
+no M2303647). The views and conclusions contained in
+this document are those of the authors and should not
+be interpreted as representing the official policies, either
+expressed or implied, of the U.S. Government. The U.S.
+Government is authorized to reproduce and distribute
+reprints for Government purposes notwithstanding any
+copyright notation herein.
+
+26
+
+References
+Anand V, Pushp D, Raj R and Das K (2019) Gaussian mixture
+model based object detection and tracking using dynamic patch
+estimation. In: 2019 IEEE/RSJ International Conference on
+Intelligent Robots and Systems. pp. 4474–4481.
+Anderson P, Chang A, Chaplot DS, Dosovitskiy A, Gupta S, Koltun
+V, Kosecka J, Malik J, Mottaghi R, Savva M et al. (2018)
+On evaluation of embodied navigation agents. arXiv preprint
+arXiv:1807.06757 .
+Argus M, Hermann L, Long J and Brox T (2020) Flowcontrol:
+Optical flow based visual servoing. In: 2020 IEEE/RSJ
+International Conference on Intelligent Robots and Systems.
+pp. 7534–7541.
+Bailer C, Taetz B and Stricker D (2015) Flow fields: Dense
+correspondence fields for highly accurate large displacement
+optical flow estimation.
+In: Proceedings of the IEEE
+international conference on computer vision. pp. 4015–4023.
+Bansal S, Tolani V, Gupta S, Malik J and Tomlin C (2020)
+Combining optimal control and learning for visual navigation
+in novel environments. In: Conference on Robot Learning. pp.
+420–429.
+Bista SR, Giordano PR and Chaumette F (2016) Appearance-based
+indoor navigation by ibvs using line segments. IEEE robotics
+and automation letters 1(1): 423–430.
+Boretti C, Bich P, Zhang Y and Baillieul J (2022) Visual navigation
+using sparse optical flow and time-to-transit.
+In: 2022
+International Conference on Robotics and Automation. pp.
+9397–9403.
+Braillon C, Pradalier C, Crowley J and Laugier C (2006) Real-time
+moving obstacle detection using optical flow models. In: 2006
+IEEE Intelligent Vehicles Symposium. pp. 466–471.
+Brito B, Floor B, Ferranti L and Alonso-Mora J (2019) Model
+predictive contouring control for collision avoidance in
+unstructured dynamic environments. IEEE Robotics and
+Automation Letters 4(4): 4459–4466. DOI:10.1109/LRA.2019.
+2929976.
+Carlone L and Karaman S (2018) Attention and anticipation in
+fast visual-inertial navigation. IEEE Transactions on Robotics
+35(1): 1–20.
+Chang CK, Siagian C and Itti L (2010) Mobile robot vision
+navigation & localization using gist and saliency. In: 2010
+IEEE/RSJ International Conference on Intelligent Robots and
+Systems. IEEE, pp. 4147–4154.
+Chaplot DS, Jiang H, Gupta S and Gupta A (2020a) Semantic
+curiosity for active visual learning. In: Computer Vision–ECCV
+2020: 16th European Conference, Glasgow, UK, August 23–28,
+2020, Proceedings, Part VI 16. Springer, pp. 309–326.
+Chaplot DS, Salakhutdinov R, Gupta A and Gupta S (2020b)
+Neural topological slam for visual navigation. In: Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition. pp. 12875–12884.
+Chaumette F and Hutchinson S (2006) Visual servo control. i. basic
+approaches. IEEE Robotics & Automation Magazine 13(4):
+82–90.
+Chen LC, Papandreou G, Kokkinos I, Murphy K and Yuille AL
+(2017a) Deeplab: Semantic image segmentation with deep
+convolutional nets, atrous convolution, and fully connected
+crfs. IEEE transactions on pattern analysis and machine
+intelligence 40(4): 834–848.
+
+Prepared using sagej.cls
+
+Journal Title XX(X)
+
+Chen LC, Papandreou G, Schroff F and Adam H (2017b) Rethinking atrous convolution for semantic image segmentation. arXiv
+preprint arXiv:1706.05587 .
+Chen M, Xue H and Cai D (2019) Domain adaptation for semantic
+segmentation with maximum squares loss. In: Proceedings of
+the IEEE/CVF International Conference on Computer Vision.
+pp. 2090–2099.
+Chen Z, Ding Z, Crandall DJ and Liu L (2023a) Polyline
+generative navigable space segmentation for autonomous
+visual navigation. IEEE Robotics and Automation Letters 8(4):
+2054–2061.
+Chen Z, Ding Z, Gregory JM and Liu L (2023b) Ida: Informed
+domain adaptive semantic segmentation. In: 2023 IEEE/RSJ
+International Conference on Intelligent Robots and Systems
+(IROS). IEEE, pp. 90–97.
+Chen Z, Pushp D, Gregory JM and Liu L (2023c) Pseudotrilateral adversarial training for domain adaptive traversability
+prediction. Autonomous Robots 47(8): 1155–1174.
+Chen Z, Pushp D and Liu L (2022) CALI: Coarse-toFine ALIgnments Based Unsupervised Domain Adaptation
+of Traversability Prediction for Deployable Autonomous
+Navigation. In: Proceedings of Robotics: Science and Systems.
+New York City, NY, USA, pp. 1–14.
+Cheng B, Misra I, Schwing AG, Kirillov A and Girdhar R
+(2022) Masked-attention mask transformer for universal image
+segmentation. In: Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition. pp. 1290–1299.
+Conroy J, Gremillion G, Ranganathan B and Humbert JS (2009)
+Implementation of wide-field integration of optic flow for
+autonomous quadrotor navigation. Autonomous robots 27:
+189–198.
+Courbon J, Mezouar Y and Martinet P (2008) Indoor navigation
+of a non-holonomic mobile robot using a visual memory.
+Autonomous Robots 25(3): 253–266.
+Dame A and Marchand E (2011) A new information theoretic
+approach for appearance-based navigation of non-holonomic
+vehicle. In: 2011 IEEE International Conference on Robotics
+and Automation. pp. 2459–2464.
+de Croon GC, De Wagter C and Seidl T (2021) Enhancing opticalflow-based control by learning visual appearance cues for
+flying robots. Nature Machine Intelligence 3(1): 33–41.
+Dosovitskiy A, Beyer L, Kolesnikov A, Weissenborn D, Zhai X,
+Unterthiner T, Dehghani M, Minderer M, Heigold G, Gelly S
+et al. (2020) An image is worth 16x16 words: Transformers for
+image recognition at scale. arXiv preprint arXiv:2010.11929 .
+Dwivedi K, Sadiya S, Balode MP, Roig G and Cichy RM (2024)
+Visual features are processed before navigational affordances
+in the human brain. Scientific Reports 14(1): 5573.
+Fox D, Burgard W and Thrun S (1997) The dynamic window
+approach to collision avoidance. IEEE Robotics & Automation
+Magazine 4(1): 23–33.
+Franz MO and Mallot HA (2000) Biomimetic robot navigation.
+Robotics and autonomous Systems 30(1-2): 133–153.
+Ganin Y, Ustinova E, Ajakan H, Germain P, Larochelle H,
+Laviolette F, Marchand M and Lempitsky V (2016) Domainadversarial training of neural networks. The journal of machine
+learning research 17(1): 2096–2030.
+Giachetti A, Campani M and Torre V (1998) The use of optical
+flow for road navigation. IEEE Transactions on Robotics and
+Automation 14(1): 34–48.
+
+Pushp et al.
+
+Hahn M, Chaplot DS, Tulsiani S, Mukadam M, Rehg JM and Gupta
+A (2021) No rl, no simulation: Learning to navigate without
+navigating.
+Advances in Neural Information Processing
+Systems 34: 26661–26673.
+Helbing D and Molnar P (1995) Social force model for pedestrian
+dynamics. Physical review E 51(5): 4282.
+Hirose N, Taguchi S, Xia F, Martı́n-Martı́n R, Tahara K, Ishigaki
+M and Savarese S (2021) Probabilistic visual navigation
+with bidirectional image prediction. In: 2021 IEEE/RSJ
+International Conference on Intelligent Robots and Systems.
+pp. 1539–1546.
+Hoffman J, Tzeng E, Park T, Zhu JY, Isola P, Saenko K, Efros A and
+Darrell T (2018) Cycada: Cycle-consistent adversarial domain
+adaptation. In: International conference on machine learning.
+PMLR, pp. 1989–1998.
+Hoffman J, Wang D, Yu F and Darrell T (2016) Fcns in the wild:
+Pixel-level adversarial and constraint-based adaptation. arXiv
+preprint arXiv:1612.02649 .
+Honegger D, Meier L, Tanskanen P and Pollefeys M (2013) An
+open source and open hardware embedded metric optical flow
+cmos camera for indoor and outdoor applications. In: 2013
+IEEE International Conference on Robotics and Automation.
+pp. 1736–1741.
+Hong J, Tan X, Pinette B, Weiss R and Riseman EM (1992) Imagebased homing. IEEE Control Systems Magazine 12(1): 38–45.
+Hoyer L, Dai D and Van Gool L (2021) Daformer: Improving network architectures and training strategies for domain-adaptive
+semantic segmentation. arXiv preprint arXiv:2111.14887 .
+Hoyer L, Dai D and Van Gool L (2022a) Daformer: Improving
+network architectures and training strategies for domainadaptive semantic segmentation. In: Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition. pp. 9924–9935.
+Hoyer L, Dai D and Van Gool L (2022b) Hrda: Context-aware
+high-resolution domain-adaptive semantic segmentation. arXiv
+preprint arXiv:2204.13132 .
+Hui TW, Tang X and Loy CC (2018) Liteflownet: A lightweight
+convolutional neural network for optical flow estimation. In:
+Proceedings of the IEEE conference on computer vision and
+pattern recognition. pp. 8981–8989.
+Ilg E, Cicek O, Galesso S, Klein A, Makansi O, Hutter F and Brox
+T (2018) Uncertainty estimates and multi-hypotheses networks
+for optical flow. In: Proceedings of the European Conference
+on Computer Vision. pp. 652–667.
+Ilg E, Mayer N, Saikia T, Keuper M, Dosovitskiy A and Brox T
+(2017) Flownet 2.0: Evolution of optical flow estimation with
+deep networks. In: Proceedings of the IEEE conference on
+computer vision and pattern recognition. pp. 2462–2470.
+Janschek K, Janschek V and Beck M (2006) Performance analysis
+for visual planetary landing navigation using optical flow and
+dem matching. In: AIAA Guidance, Navigation, and Control
+Conference and Exhibit. p. 6706.
+Jayender J, Azizian M and Patel RV (2008) Autonomous
+image-guided robot-assisted active catheter insertion. IEEE
+Transactions on Robotics 24(4): 858–871.
+Jia Z, Balasuriya A and Challa S (2009) Vision based target tracking
+for autonomous land vehicle navigation: a brief survey. Recent
+Patents on Computer Science 2(1): 32–42.
+
+Prepared using sagej.cls
+
+27
+
+Karnan H, Warnell G, Xiao X and Stone P (2022) Voila:
+Visual-observation-only imitation learning for autonomous
+navigation. In: 2022 International Conference on Robotics and
+Automation (ICRA). IEEE, pp. 2497–2503.
+Khan MAM, Pushp D and Liu L (2025) Afrda: Attentive feature
+refinement for domain adaptive semantic segmentation. IEEE
+Robotics and Automation Letters .
+Kim N, Kwon O, Yoo H, Choi Y, Park J and Oh S
+(2023) Topological semantic graph memory for image-goal
+navigation. In: Conference on Robot Learning. PMLR, pp.
+393–402.
+Kirillov A, Mintun E, Ravi N, Mao H, Rolland C, Gustafson L,
+Xiao T, Whitehead S, Berg AC, Lo WY et al. (2023) Segment
+anything. In: Proceedings of the IEEE/CVF International
+Conference on Computer Vision. pp. 4015–4026.
+Koreitem K, Shkurti F, Manderson T, Chang WD, Higuera JCG
+and Dudek G (2020) One-shot informed robotic visual search
+in the wild. In: 2020 IEEE/RSJ International Conference on
+Intelligent Robots and Systems. pp. 5800–5807.
+Kwon O, Kim N, Choi Y, Yoo H, Park J and Oh S (2021) Visual
+graph memory with unsupervised representation for visual
+navigation. In: Proceedings of the IEEE/CVF international
+conference on computer vision. pp. 15890–15899.
+Kwon O, Park J and Oh S (2023) Renderable neural radiance
+map for visual navigation. In: Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition. pp.
+9099–9108.
+Károly AI, Elek RN, Haidegger T, Széll K and Galambos P (2019)
+Optical flow-based segmentation of moving objects for mobile
+robot navigation using pre-trained deep learning models. In:
+2019 IEEE International Conference on Systems, Man and
+Cybernetics. pp. 3080–3086.
+Lei X, Wang M, Zhou W, Li L and Li H (2024) Instance-aware
+exploration-verification-exploitation for instance imagegoal
+navigation. In: Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition. pp. 16329–16339.
+Li Y and Košecka J (2020) Learning view and target invariant
+visual servoing for navigation. In: 2020 IEEE International
+Conference on Robotics and Automation (ICRA). IEEE, pp.
+658–664.
+Liu H, Hong TH, Herman M, Camus T and Chellappa R (1998)
+Accuracy vs efficiency trade-offs in optical flow algorithms.
+Computer Vision and Image Understanding 72(3): 271–286.
+Liu S, Huang S, Xu X, Lloret J and Muhammad K (2023)
+Efficient visual tracking based on fuzzy inference for intelligent
+transportation systems. IEEE Transactions on Intelligent
+Transportation Systems 24(12): 15795–15806.
+Liu S and Okatani T (2022) Symmetry-aware neural architecture for
+embodied visual exploration. In: 2022 IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR). IEEE,
+pp. 17221–17230.
+Liu Z, Li X, Luo P, Loy CC and Tang X (2017) Deep learning
+markov random field for semantic segmentation.
+IEEE
+transactions on pattern analysis and machine intelligence
+40(8): 1814–1828.
+Long J, Shelhamer E and Darrell T (2015) Fully convolutional
+networks for semantic segmentation. In: Proceedings of the
+IEEE conference on computer vision and pattern recognition.
+pp. 3431–3440.
+
+28
+
+Luo Y, Zheng L, Guan T, Yu J and Yang Y (2019) Taking a
+closer look at domain shift: Category-level adversaries for
+semantics consistent domain adaptation. In: Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition. pp. 2507–2516.
+Mammarella M, Campa G, Fravolini M, Gu Y, Seanor B and
+Napolitano M (2008) A comparison of optical flow algorithms
+for real time aircraft guidance and navigation. In: AIAA
+Guidance, Navigation and Control Conference and Exhibit. p.
+7494.
+Manderson T, Higuera JCG, Wapnick S, Tremblay JF, Shkurti F,
+Meger D and Dudek G (2020) Vision-Based Goal-Conditioned
+Policies for Underwater Navigation in the Presence of
+Obstacles. In: Proceedings of Robotics: Science and Systems.
+Corvalis, Oregon, USA, pp. 1–10.
+Mateus D, Avina G and Devy M (2005) Robot visual navigation
+in semi-structured outdoor environments. In: Proceedings
+of the 2005 IEEE International Conference on Robotics and
+Automation. IEEE, pp. 4691–4696.
+McCarthy C and Bames N (2004) Performance of optical flow
+techniques for indoor navigation with a mobile robot. In: IEEE
+International Conference on Robotics and Automation, 2004.
+Proceedings. ICRA ’04. 2004, volume 5. pp. 5093–5098.
+Mei K, Zhu C, Zou J and Zhang S (2020) Instance adaptive selftraining for unsupervised domain adaptation. In: Computer
+Vision–ECCV 2020: 16th European Conference, Glasgow, UK,
+August 23–28, 2020, Proceedings, Part XXVI 16. Springer, pp.
+415–430.
+Menegatti E, Maeda T and Ishiguro H (2004) Image-based memory
+for robot navigation using properties of omnidirectional
+images. Robotics and Autonomous Systems 47(4): 251–267.
+Meronen L, Wilkinson WJ and Solin A (2020) Movement tracking
+by optical flow assisted inertial navigation. In: 2020 IEEE 23rd
+International Conference on Information Fusion. pp. 1–8.
+Mielle M, Magnusson M and Lilienthal AJ (2016) Using sketchmaps for robot navigation: Interpretation and matching. In:
+2016 IEEE international symposium on safety, security, and
+rescue robotics (SSRR). IEEE, pp. 252–257.
+Ohnishi N and Imiya A (2006) Dominant plane detection from
+optical flow for robot navigation. Pattern Recognition Letters
+27(9): 1009–1021.
+Otte MW, Richardson SG, Mulligan J and Grudic G (2009) Path
+planning in image space for autonomous robot navigation in
+unstructured environments. Journal of Field Robotics 26(2):
+212–240.
+Pan X, Zhang T, Ichter B, Faust A, Tan J and Ha S (2020) Zeroshot imitation learning from demonstrations for legged robot
+visual navigation. In: 2020 IEEE International Conference on
+Robotics and Automation (ICRA). IEEE, pp. 679–685.
+Ponce H, Brieva J and Moya-Albor E (2018) Distance estimation
+using a bio-inspired optical flow strategy applied to neurorobotics. In: 2018 International Joint Conference on Neural
+Networks. pp. 1–7.
+Pushp D, Chen Z, Luo C, Gregory JM and Liu L (2023) Povnav:
+A pareto-optimal mapless visual navigator. In: International
+Symposium on Experimental Robotics. Springer, pp. 250–263.
+Pushp D, Kalhapure S, Das K and Liu L (2022) Uav-miniugv hybrid
+system for hidden area exploration and manipulation. In: 2022
+IEEE/RSJ International Conference on Intelligent Robots and
+Systems. pp. 1297–1304.
+
+Prepared using sagej.cls
+
+Journal Title XX(X)
+
+Ranftl R, Bochkovskiy A and Koltun V (2021) Vision transformers
+for dense prediction. In: Proceedings of the IEEE/CVF
+International Conference on Computer Vision. pp. 12179–
+12188.
+Ranjan A and Black MJ (2017) Optical flow estimation using
+a spatial pyramid network. In: Proceedings of the IEEE
+conference on computer vision and pattern recognition. pp.
+4161–4170.
+Ren Z, Yan J, Ni B, Liu B, Yang X and Zha H (2017) Unsupervised
+deep learning for optical flow estimation. Proceedings of the
+AAAI Conference on Artificial Intelligence 31(1).
+Rondon E, Fantoni-Coichot I, Sanchez A and Sanahuja G
+(2009) Optical flow-based controller for reactive and relative
+navigation dedicated to a four rotor rotorcraft. In: 2009
+IEEE/RSJ International Conference on Intelligent Robots and
+Systems. pp. 684–689.
+Ronneberger O, Fischer P and Brox T (2015) U-net: Convolutional
+networks for biomedical image segmentation. In: International
+Conference on Medical image computing and computerassisted intervention. pp. 234–241.
+Saito K, Watanabe K, Ushiku Y and Harada T (2018) Maximum
+classifier discrepancy for unsupervised domain adaptation. In:
+Proceedings of the IEEE conference on computer vision and
+pattern recognition. pp. 3723–3732.
+Shen WB, Xu D, Zhu Y, Guibas LJ, Fei-Fei L and Savarese S (2019)
+Situational fusion of visual representation for visual navigation.
+In: Proceedings of the IEEE/CVF international conference on
+computer vision. pp. 2881–2890.
+Sivakumar AN, Modi S, Gasparino MV, Ellis C, Baquero Velasquez
+AE, Chowdhary G and Gupta S (2021) Learned Visual
+Navigation for Under-Canopy Agricultural Robots.
+In:
+Proceedings of Robotics: Science and Systems. Virtual, pp. 1–
+15.
+Song D, Liang J, Xiao X and Manocha D (2024) Tgs:
+Trajectory generation and selection using vision language
+models in mapless outdoor environments. arXiv preprint
+arXiv:2408.02454 .
+Song KT and Huang JH (2001) Fast optical flow estimation and its
+application to real-time obstacle avoidance. In: Proceedings
+2001 ICRA. IEEE International Conference on Robotics and
+Automation, volume 3. pp. 2891–2896 vol.3.
+Soundararajan R and Bovik AC (2013) Survey of information
+theory in visual quality assessment. Signal, Image and Video
+Processing 7: 391–401.
+Srinivasan MV, Chahl JS, Weber K, Venkatesh S, Nagle MG and
+Zhang SW (1999) Robot navigation inspired by principles of
+insect vision. Robotics and Autonomous Systems 26(2-3): 203–
+216.
+Srivastava R, Lima R, Shinde C, Pushp D and Das K (2021)
+Estimation and control for autonomous uav system to
+neutralize unknown aerial maneuvering target. In: 2021
+Seventh Indian Control Conference. pp. 117–122.
+Talukder A and Matthies L (2004) Real-time detection of moving
+objects from moving vehicles using dense stereo and optical
+flow.
+In: 2004 IEEE/RSJ International Conference on
+Intelligent Robots and Systems, volume 4. pp. 3718–3725 vol.4.
+Vakil MI, Malas JA and Megherbi DB (2015) Information theoretic
+approach for template matching in registration of partially
+overlapped aerial imagery. In: 2015 National Aerospace and
+Electronics Conference (NAECON). IEEE, pp. 146–150.
+
+Pushp et al.
+
+van der Zwaan S, Bernardino A and Santos-Victor J (2002)
+Visual station keeping for floating robots in unstructured
+environments. Robotics and Autonomous Systems 39(3-4):
+145–155.
+Vaswani A, Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez AN,
+Kaiser Ł and Polosukhin I (2017) Attention is all you need.
+Advances in neural information processing systems 30.
+Wang H, Shen T, Zhang W, Duan LY and Mei T (2020) Classes
+matter: A fine-grained adversarial approach to cross-domain
+semantic segmentation. In: European Conference on Computer
+Vision. Springer, pp. 642–659.
+Wang Y, Wang H, Liu B, Liu Y, Wu J and Lu Z (2021) A visual
+navigation framework for the aerial recovery of uavs. IEEE
+Transactions on Instrumentation and Measurement 70: 1–13.
+Wasserman J, Yadav K, Chowdhary G, Gupta A and Jain U (2023)
+Last-mile embodied visual navigation. In: Conference on Robot
+Learning. PMLR, pp. 666–678.
+Wellhausen L, Ranftl R and Hutter M (2020) Safe robot navigation
+via multi-modal anomaly detection. IEEE Robotics and
+Automation Letters 5(2): 1326–1333.
+Wu Q, Gong X, Xu K, Manocha D, Dong J and Wang J (2020)
+Towards target-driven visual navigation in indoor scenes via
+generative imitation learning. IEEE Robotics and Automation
+Letters 6(1): 175–182.
+Wu Q, Xu K, Wang J, Xu M, Gong X and Manocha D
+(2021) Reinforcement learning-based visual navigation with
+information-theoretic regularization.
+IEEE Robotics and
+Automation Letters 6(2): 731–738.
+Wulff J and Black MJ (2015) Efficient sparse-to-dense optical flow
+estimation using a learned basis and layers. In: Proceedings
+of the IEEE Conference on Computer Vision and Pattern
+Recognition. pp. 120–130.
+Xie B, Yuan L, Li S, Liu CH and Cheng X (2022) Towards fewer
+annotations: Active learning via region impurity and prediction
+uncertainty for domain adaptive semantic segmentation. In:
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. pp. 8068–8078.
+Xie E, Wang W, Yu Z, Anandkumar A, Alvarez JM and
+Luo P (2021) Segformer: Simple and efficient design for
+semantic segmentation with transformers. arXiv preprint
+arXiv:2105.15203 .
+Yamada H, Tominaga T and Ichikawa M (2003) An autonomous
+flying object navigated by real-time optical flow and visual
+target detection. In: Proceedings. 2003 IEEE International
+Conference on Field-Programmable Technology. pp. 222–227.
+Yan C, Qin J, Liu Q, Ma Q and Kang Y (2022) Mapless navigation
+with safety-enhanced imitation learning. IEEE Transactions on
+Industrial Electronics 70(7): 7073–7081.
+Yang F, Wang C, Cadena C and Hutter M (2023) iPlanner:
+Imperative Path Planning. In: Proceedings of Robotics: Science
+and Systems. Daegu, Republic of Korea. DOI:10.15607/RSS.
+2023.XIX.064.
+Yu F and Koltun V (2015) Multi-scale context aggregation by
+dilated convolutions. arXiv preprint arXiv:1511.07122 .
+Zhai M, Xiang X, Lv N and Kong X (2021) Optical flow and scene
+flow estimation: A survey. Pattern Recognition 114: 107861.
+Zhang J, Sun J, Wang J and Yue XG (2021) Visual object tracking
+based on residual network and cascaded correlation filters.
+Journal of ambient intelligence and humanized computing 12:
+8427–8440.
+
+Prepared using sagej.cls
+
+29
+
+Zhang M, Li Y and Yang J (2008) Autonomous visual navigation
+guided by path boundaries for mobile robot.
+In: 2008
+International Conference on Computer Science and Software
+Engineering, volume 6. IEEE, pp. 344–348.
+Zhao H, Shi J, Qi X, Wang X and Jia J (2017) Pyramid scene parsing
+network. In: Proceedings of the IEEE conference on computer
+vision and pattern recognition. pp. 2881–2890.
+Zhao Y and Pei H (2013) Object tracking based on particle filter
+with discriminative features. Journal of control Theory and
+Applications 11(1): 42–53.
+Zheng S, Lu J, Zhao H, Zhu X, Luo Z, Wang Y, Fu Y, Feng J, Xiang
+T, Torr PH et al. (2021) Rethinking semantic segmentation
+from a sequence-to-sequence perspective with transformers. In:
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. pp. 6881–6890.
+Zingg S, Scaramuzza D, Weiss S and Siegwart R (2010) Mav
+navigation through indoor corridors using optical flow. In: 2010
+IEEE International Conference on Robotics and Automation.
+pp. 3361–3368.
+Zou Y, Yu Z, Kumar B and Wang J (2018) Unsupervised domain
+adaptation for semantic segmentation via class-balanced selftraining. In: Proceedings of the European conference on
+computer vision (ECCV). pp. 289–305.
+Zou Y, Yu Z, Liu X, Kumar B and Wang J (2019) Confidence
+regularized self-training. In: Proceedings of the IEEE/CVF
+International Conference on Computer Vision. pp. 5982–5991.
+
+

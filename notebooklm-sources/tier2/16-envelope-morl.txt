@@ -1,0 +1,3199 @@
+arXiv:1908.08342v2 [cs.LG] 6 Nov 2019
+
+A Generalized Algorithm for Multi-Objective
+Reinforcement Learning and Policy Adaptation
+
+Runzhe Yang
+Department of Computer Science
+Princeton University
+runzhey@cs.princeton.edu
+
+Xingyuan Sun
+Department of Computer Science
+Princeton University
+xs5@cs.princeton.edu
+
+Karthik Narasimhan
+Department of Computer Science
+Princeton University
+karthikn@cs.princeton.edu
+
+Abstract
+We introduce a new algorithm for multi-objective reinforcement learning (MORL)
+with linear preferences, with the goal of enabling few-shot adaptation to new tasks.
+In MORL, the aim is to learn policies over multiple competing objectives whose
+relative importance (preferences) is unknown to the agent. While this alleviates
+dependence on scalar reward design, the expected return of a policy can change
+significantly with varying preferences, making it challenging to learn a single
+model to produce optimal policies under different preference conditions. We
+propose a generalized version of the Bellman equation to learn a single parametric
+representation for optimal policies over the space of all possible preferences. After
+an initial learning phase, our agent can execute the optimal policy under any given
+preference, or automatically infer an underlying preference with very few samples.
+Experiments across four different domains demonstrate the effectiveness of our
+approach.1
+
+1
+
+Introduction
+
+In recent years, there has been increased interest
+Turn left at the
+in the paradigm of multi-objective reinforcement
+next intersection.
+learning (MORL), which deals with learning
+success 0.5
+success 0.7
+control policies to simultaneously optimize over
+brevity 0.5
+brevity 0.3
+several criteria. Compared to traditional RL,
+(weather)
+(driving)
+where the aim is to optimize for a scalar reward,
+the optimal policy in a multi-objective setting Figure 1: Task-oriented dialogue policy learning is a
+depends on the relative preferences among com- real-life example of unknown linear preference scenario.
+peting criteria. For example, consider a virtual Users may expect either briefer dialogue or more inforassistant (Figure 1) that can communicate with mative dialogue depending on the task.
+a human to perform a specific task (e.g., provide
+weather or navigation information). Depending on the user’s relative preferences between aspects like
+success rate or brevity, the agent might need to follow completely different strategies. If success is all
+that matters (e.g., providing an accurate weather report), the agent might provide detailed responses
+or ask several follow-up questions. On the other hand, if brevity is crucial (e.g., while providing
+Showers this evening, becoming
+a steady rain overnight. Low 6C.
+Winds S at 15 to 25 km/h. Chance
+of rain 100%…
+
+1
+
+Code is available at https://github.com/RunzheYang/MORL
+
+33rd Conference on Neural Information Processing Systems (NeurIPS 2019), Vancouver, Canada.
+
+turn-by-turn guidance), the agent needs to find the shortest way to complete the task. In traditional
+RL, this is often a fixed choice made by the designer and incorporated into the scalar reward. While
+this suffices in cases where we know the preferences of a task beforehand, the learned policy is limited
+in its applicability to scenarios with different preferences. The MORL framework provides two
+distinct advantages – (1) reduced dependence on scalar reward design to combine different objectives,
+which is both a tedious manual task and can lead to unintended consequences [1], and (2) dynamic
+adaptation or transfer to related tasks with different preferences.
+However, learning policies over multiple preferences under the MORL setting has proven to be
+quite challenging, with most prior work using one of two strategies [2]. The first is to convert
+the multi-objective problem into a single-objective one through various techniques [3–6] and use
+traditional RL algorithms. These methods only learn an ‘average’ policy over the space of preferences
+and cannot be tailored to be optimal for specific preferences. The second strategy is to compute a set
+of optimal policies that encompass the entire space of possible preferences in the domain [7–9]. The
+main drawback of these approaches is their lack of scalability – the challenge of representing a Pareto
+front (or its convex approximation) of optimal policies is handled by learning several individual
+policies, which can grow significantly with the size of the domain.
+In this paper, we propose a novel algorithm for learning a single policy network that is optimized over
+the entire space of preferences in a domain. This allows our trained model to produce the optimal
+policy for any user-specified preference. We tackle two concrete challenges in MORL: (1) provide
+theoretical convergence results of a multi-objective version of Q-Learning for MORL with linear
+preferences, and (2) demonstrate effective use of deep neural networks to scale MORL to larger
+domains. Our algorithm is based on two key insights – (1) the optimality operator for a generalized
+version of Bellman equation [10] with preferences is a valid contraction, and (2) optimizing for the
+convex envelope of multi-objective Q-values ensures an efficient alignment between preferences
+and corresponding optimal policies. We use hindsight experience replay [11] to re-use transitions
+for learning with different sampled preferences and homotopy optimization [12] to ensure tractable
+learning. In addition, we also demonstrate how to use our trained model to automatically infer hidden
+preferences on a new task, when provided with just scalar rewards, through a combination of policy
+gradient and stochastic search over the preference parameters.
+We perform empirical evaluation on four different domains – deep sea treasure (a popular MORL
+benchmark), a fruit tree navigation task, task-oriented dialog, and the video game Super Mario Bros.
+Our experiments demonstrate that our methods significantly outperform competitive baselines on all
+domains. For instance, our envelope MORL algorithm achieves an % improvement on average user
+utility compared to the scalarized MORL in the dialog task and a factor 2x average improvement on
+SuperMario game with random preferences. We also demonstrate that our agent can reasonably infer
+hidden preferences at test time using very few sampled trajectories.
+
+2
+
+Background
+
+A multi-objective Markov decision process (MOMDP) can be represented by the tuple
+hS, A, P, r, Ω, fΩ i with state space S, action space A, transition distribution P(s0 |s, a), vector
+reward function r(s, a), the space of preferences Ω, and preference functions, e.g., fω (r) which
+produces a scalar utility using preference ω ∈ Ω. In this work, we consider the class of MOMDPs
+with linear preference functions, i.e., fω (r(s, a)) = ω | r(s, a). We observe that if ω is fixed to a
+single value, this MOMDP collapses into a standard MDP. On the other hand, if we consider all
+∗
+0
+possible
+P returns from an MOMDP, we have a Pareto frontier F := {r̂ |6 ∃r̂ ≥ r̂}, where the return
+r̂ := t γ t r(st , at ). And for all possible preference in Ω, we define a convex coverage set (CCS) of
+the Pareto frontier as:
+CCS := {r̂ ∈ F ∗ | ∃ω ∈ Ω s.t. ω | r̂ ≥ ω | r̂ 0 , ∀r̂ 0 ∈ F ∗ },
+
+which contains all returns that provide the maximum cumulative utility. Figure 2 (a) shows an
+example of CCS and the Pareto frontier. The CCS is a subset of the Pareto frontier (points A to H, and
+K), containing all the solutions on its outer convex boundary (excluding point K). When a specific
+linear preference ω is given, the point within the CCS with the largest projection along the direction
+of the relative importance weights will be the optimal solution (Figure 2(b)).
+Our goal is to train an agent to recover policies for the entire CCS of MOMDP and then adapt to the
+optimal policy for any given ω ∈ Ω at test time. We emphasize that we are not solving for a single,
+2
+
+B
+
+CCS
+
+C
+
+Non-optimal
+
+D
+K
+
+E
+
+L
+F
+G
+H
+
+QUANTITY OF OBJECTIVE 1
+
+b.
+
+D
+
+Preferred Solution
+
+F
+
+Non-preferred
+Preference ! 2 ⌦
+
+D
+
+<latexit sha1_base64="ePxP6q1byPeQR8z8PEXhpWI4T3M=">AAACWnicfZFdSxwxFIaz40d1tLpqvfImdBFK2S4zRdBL0V54U7TQVcEsy5ns2TGYjyHJiMuwP8Zb/UVCf4yZcaFaoQcCT07ec07yJiukcD5JnlrR3PzC4oel5Xhl9ePaentj89yZ0nLscyONvczAoRQa+154iZeFRVCZxIvs5rg+v7hF64TRv/2kwIGCXIux4OBDatjeZpmizCjMgTKhKTutcdjuJL2kCfoe0hl0yCzOhhutb2xkeKlQey7Buas0KfygAusFlziNWemwAH4DOV4F1KDQDarm/lO6GzIjOjY2LO1pk31dUYFyCvx1lwaoJa4hN1FZl2aq2ZhCh0a16u0sPz4YVEIXpUfNX0aNS0m9obUddCQsci8nNGY/MNzc4s/Q4rRAC97YrxUDmyu4m4aX5JR1ac3/kwr9Vxo43g0TgFsRbKD8GixwH34jDgan/9r5Hs6/99Kkl/7a6xwezaxeIjvkM/lCUrJPDskJOSN9wklF7skDeWz9iaJoOVp5kUatWc0WeRPRp2fCfrJd</latexit>
+
+Utility Projection
+F
+
+! | r̂D > ! | r̂F
+<latexit sha1_base64="v+HK6S9OOx7MNeHr24Cpmm81jK4=">AAACkHicjZBtSxwxEMdz2yfdPnjqy74JPYRSrseuCPVVa1VELKUWeiqY6zGbm9sL5mFJsqXHsh/KT1N8Z79Js+tBa4XSgcAvk//MZP5ZIYXzSXLVie7df/Dw0dJy/PjJ02cr3dW1E2dKy3HIjTT2LAOHUmgceuElnhUWQWUST7OLveb99BtaJ4z+4ucFjhTkWkwFBx9S4+4HlinKjMIcvlZMaI+Wg6wpm4Gvmjdbj/fpW/ofsoNxt5cMkjboXUgX0COLOB6vdl6zieGlQu25BOfO06TwowqsF1xiHbPSYQH8AnI8D6hBoRtV7dY13QiZCZ0aG472tM3+WVGBcgr8rE8DNBLXkpurrE8z1V5MoUOjRnV7lp9ujyqhi9Kj5jejpqWk3tDGRDoRFrmXcxqzfQw/t/gxtPhUoAVv7KuKgc0VfK/DJjllfdrwv6RC/5YGjjfCBOBWBBson4EFHgx3cTA4/dvOu3CyOUiTQfp5q7ezu7B6iTwnL8hLkpI3ZIcckmMyJJxckh/kmvyM1qLt6F30/kYadRY16+RWREe/AAi9yBw=</latexit>
+
+QUANTITY OF OBJECTIVE 1
+
+A Snapshot of
+Deep MORL Algorithm
+
+c.
+
+!1
+
+QUANTITY OF OBJECTIVE 2
+
+Pareto Frontier
+A
+
+QUANTITY OF OBJECTIVE 2
+
+QUANTITY OF OBJECTIVE 2
+
+a.
+
+D
+
+F
+
+<latexit sha1_base64="9Bu7KHoXXragPIuL8XXDhUOAfck=">AAACT3icfZFNSxxBEIZ71sSPMRo1Ry9NFkFkXWaCoEfRHHIJGnBVcJalprd2bLa/6O4JWYb9G17NX/LoL8ktpGcykKhgQcPT1W9XVb+dG8GdT5LHqLPw5u3i0vJKvPpubf39xubWpdOlZThgWmh7nYNDwRUOPPcCr41FkLnAq3x6Wp9ffUfruFYXfmZwKKFQfMIZ+JDKslzSTEssYJSONrpJP2mCvoS0hS5p43y0Ge1nY81KicozAc7dpInxwwqs50zgPM5KhwbYFAq8CahAohtWzdBzuhMyYzrRNizlaZP9/0YF0knwtz0aoJa4htxM5j2ay2ajjQqFatXTXn5yNKy4MqVHxf62mpSCek1rD+iYW2RezGicfcYwucWvocSZQQte270qA1tI+DEPLylo1qM1vybl6p80cLwTOgCzPNhA2S1YYD58QRwMTp/b+RIuP/XTpJ9+O+gen7RWL5Nt8pHskpQckmPyhZyTAWHEkDtyT35GD9Gv6HenlXaiFj6QJ9FZ+QMZE7Co</latexit>
+
+Optimal Solutions
+D
+L
+
+Sampled Preferences
+F
+
+!2
+<latexit sha1_base64="+UouUJfOmsYL+mxiFW/Pw7MTXn0=">AAACT3icfZFNSxxBEIZ7NsaPMfHzmEvjIoSwWWYkEI+iHryEGHBVcJalprd2bLa/6O4Rl2H/htf4lzz6S3IL6ZkMJCpY0PB09dtV1W/nRnDnk+Qx6rxZeLu4tLwSr757v7a+sbl17nRpGQ6YFtpe5uBQcIUDz73AS2MRZC7wIp8e1ecXN2gd1+rMzwwOJRSKTzgDH1JZlkuaaYkFjPZGG92knzRBX0LaQpe0cTrajD5nY81KicozAc5dpYnxwwqs50zgPM5KhwbYFAq8CqhAohtWzdBzuhsyYzrRNizlaZP9/0YF0knw1z0aoJa4htxM5j2ay2ajjQqFatXTXn6yP6y4MqVHxf62mpSCek1rD+iYW2RezGicHWOY3OK3UOK7QQte209VBraQcDsPLylo1qM1vybl6p80cLwbOgCzPNhA2TVYYD58QRwMTp/b+RLO9/pp0k9/fOkeHLZWL5MPZId8JCn5Sg7ICTklA8KIIXfkJ7mPHqJf0e9OK+1ELWyTJ9FZ+QMa87Cp</latexit>
+
+QUANTITY OF OBJECTIVE 1
+
+Figure 2: (a) The Pareto frontier may encapsulate local concave parts (points A-H, plus point K), whereas
+CCS is a convex subset of Pareto frontier (points A-H). Point L indicates a non-optimal solution. (b) Linear
+preferences select the optimal solution from CCS with the highest utility, represented by the projection length
+along preference vector. Arrows are different linear preferences, and points indicate possible returns. Return D
+has better cumulative utility than return F under the preference in solid line. (c) The scalarized MORL algorithms
+(e.g., [13]) find the optimal solutions at a stage while they are not aligned with preference, e.g., two optimal
+solutions D and F in the CCS, misaligned with preferences ω2 and ω1 . The scalarized update cannot use the
+information of maxa Q(s, a, ω1 ) (corresponding to F) to update the optimal solution aligned with ω2 or vice
+versa. It only searches along ω1 direction leading to non-optimal L, even if solution D has been seen under ω2 .
+It still requires many iterations for the value-preference alignment.
+
+unknown ω, but instead aim for generalization across the entire space of preferences. Accordingly,
+our MORL setup has two phases:
+Learning phase. In this phase, the agent learns a set of optimal policies ΠL corresponding to the
+entire CCS of the MOMDP, using interactions with the environment and historical trajectories. For
+each π ∈ ΠL , there exists at least one linear preference ω such that no other policy π 0 generates
+higher utility under that ω:
+π ∈ ΠL ⇒ ∃ ω ∈ Ω, s.t. ∀π 0 ∈ Π, ω | v π (s0 ) ≥ ω | v π (s0 ),
+0
+
+where s0 is a fixed initial state, and v π is the value function, i.e., v π (s) = Eπ [r̂|s0 = s]. Given any
+preference ω, ΠL (ω) determines the optimal policy.
+Adaptation phase. After learning, the agent is provided a new task, with either a) a preference ω
+specified by a human, or b) an unknown preference, where the agent has to automatically infer ω.
+Efficiently aligning ΠL (ω) with the preferred optimal policy is non-trivial since the CCS can be very
+large. In both cases, the agent is evaluated on how well it can adapt to tasks with unseen preferences.
+2.1
+
+Related Work
+
+Multi-Objective RL Existing MORL algorithms can be roughly divided into two main categories [14, 15, 2]: single-policy methods and multiple-policy methods. Single-policy methods aim
+to find the optimal policy for a given preference among the objectives [16, 17]. These methods
+explore different forms of preference functions, including non-linear ones such as the minimum over
+all objectives or the number of objectives that exceed a certain threshold. However, single-policy
+methods do not work when preferences are unknown.
+Multi-policy approaches learn a set of policies to obtain the approximate Pareto frontier of optimal
+solutions. The most common strategy is to perform multiple runs of a single-policy method over
+different preferences [7, 18]. Policy-based RL algorithms [19, 20] simultaneously learn the optimal
+manifold over a set of preferences. Several value-based reinforcement learning algorithms employ
+an extended version of the Bellman equation and maintain the convex hull of the discrete Pareto
+frontier [8, 21, 22]. Multi-objective fitted Q-iteration (MOFQI) [23, 24] encapsulates preferences
+as input to a Q-function approximator and uses expanded historical trajectories to learn multiple
+policies. This allows the agent to construct the optimal policy for any given preference during testing.
+However, these methods explicitly maintain sets of policies, and hence are difficult to scale up to
+high-dimensional preference spaces. Furthermore, these methods are designed to work during the
+learning phase but cannot be easily adapted to new preferences at test time.
+Scalarized Q-Learning. Recent work has proposed the scalarized Q-learning algorithm [9] which
+uses a vector value function but performs updates after computing the inner product of the value
+function with a preference vector. This method uses an outer loop to perform a search over preferences,
+3
+
+while the inner loop performs the scalarized updates. Recently, Abels et al. [13] extended this to use
+a single neural network to represent value functions over the entire space of preferences. However,
+scalarized updates are not sample efficient and lead to sub-optimal MORL policies – our approach
+uses a global optimality filter to perform envelope Q-function updates, leading to faster and better
+learning (as we demonstrate in Figure 2(c) and Section 4).
+Three key contributions distinguish our work from Abels et al. [13]: (1) At algorithmic level,
+our envelope Q-learning algorithm utilizes the convex envelope of the solution frontier to update
+parameters of the policy network, which allows our method to quickly align one preference with
+optimal rewards and trajectories that may have been explored under other preferences. (2) At
+theoretical level, we introduce a theoretical framework for designing and analyzing value-based
+MORL algorithms, and convergence proofs for our envelope Q-learning algorithm. (3) At empirical
+level, we provide new evaluation metrics and benchmark environments for MORL and apply our
+algorithm to a wider variety of domains including two complex larger scale domains – task-oriented
+dialog and supermario. Our FTN domain is a scaled up, more complex version of Minecart in [13].
+Policy Adaptation. Our policy adaptation scheme is related to prior work in preference elicitation [25–27] or inverse reinforcement learning [28, 29]. Inverse RL (IRL) aims to learn a scalar reward
+function from expert demonstrations, or directly imitate the expert’s policy without intermediate steps
+for solving a scalar reward function [30]. Chajewska et al. [31] proposed a Bayesian version to learn
+the utility function. IRL is effective when the hidden preference is fixed and expert demonstrations
+are available. In contrast, we require policy adaptation across various different preferences and do
+not use any demonstrations.
+
+3
+
+Multi-objective RL with Envelope Value Updates
+
+In this section, we propose a new algorithm for multi-objective RL called envelope Q-learning. Our
+key idea is to use vectorized value functions and perform envelope updates, which utilize the convex
+envelope of the solution frontier to update parameters. This is in contrast to approaches like scalarized
+Q-Learning, which perform value function updates using only a single preference at a time. Since
+we learn a set of policies simultaneously over multiple preferences, and our concept of optimality is
+defined on vectorized rewards, existing convergence results from single-objective RL no longer hold.
+Hence, we first provide a theoretical analysis of our proposed update scheme below followed by a
+sketch of the resulting algorithm.
+Bellman operators. The standard Q-Learning [32] algorithm for single-objective RL utilizes the
+Bellman optimality operator T :
+(T Q)(s, a) := r(s, a) + γEs0 ∼P(·|s,a) (HQ)(s0 ).
+
+(1)
+
+where the operator H is defined by (HQ)(s0 ) := supa0 ∈A Q(s0 , a0 ) is an optimality filter over the
+Q-values for the next state s0 .
+We extend this to the MORL case by considering a value space Q ⊆ (Ω → Rm )S×A , containing all
+bounded functions Q(s, a, ω) – estimates of expected total rewards under m-dimensional preference
+(ω) vectors. We can define a corresponding value metric d as:
+d(Q, Q0 ) :=
+
+sup
+s∈S,a∈A
+ω∈Ω
+
+|ω | (Q(s, a, ω) − Q0 (s, a, ω))|.
+
+(2)
+
+Since the identity of indiscernibles [33] does not hold, we note that d forms a complete pseudo-metric
+space, and refer to Q as a Multi-Objective Q-value (MOQ) function. Given a policy π and sampled
+trajectories τ , we first define a multi-objective evaluation operator Tπ as:
+(Tπ Q)(s, a, ω) := r(s, a) + γEτ ∼(P,π) Q(s0 , a0 , ω).
+
+(3)
+
+We then define an optimality filter H for the MOQ function as (HQ)(s, ω) :=
+argQ supa∈A,ω0 ∈Ω ω | Q(s, a, ω 0 ), where the argQ takes the multi-objective value corresponding to
+the supremum (i.e., Q(s, a, ω 0 ) such that (a, ω 0 ) ∈ arg supa∈A,ω0 ∈Ω ω | Q(s, a, ω 0 )). The return of
+argQ depends on which ω is chosen for scalarization, and we keep argQ for simplicity. This can
+be thought of as generalized version of the single-objective optimality filter in Eq. 1. Intuitively, H
+solves the convex envelope (hence the name envelope Q-learning) of the current solution frontier to
+4
+
+produce the Q that optimizes utility given state s and preference ω. This allows for more optimistic
+Q-updates compared to using just the standard Bellman filter (H) that optimizes over actions only –
+this is the update used by scalarized Q-learning [13]. We can then define a multi-objective optimality
+operator T as:
+(T Q)(s, a, ω) := r(s, a) + γEs0 ∼P(·|s,a) (HQ)(s0 , ω).
+(4)
+The following theorems demonstrate the feasibility of using our optimality operator for multi-objective
+RL. Proofs for all the theorems are provided in the supplementary material.
+Theorem 1 (Fixed Point of Envelope Optimality Operator). Let Q∗ ∈ Q be the preferred optimal
+value function in the value space, such that
+"∞
+#
+X
+∗
+|
+t
+Q (s, a, ω) = argQ sup ω E τ ∼(P,π)
+γ r(st , at ) ,
+(5)
+π∈Π
+
+|s0 =s,a0 =a
+
+t=0
+
+where the argQ takes the multi-objective value corresponding to the supremum. Then, Q∗ = T Q∗ .
+
+Theorem 1 tells us the preferred optimal value function is a fixed-point of T in the value space.
+Theorem 2 (Envelope Optimality Operator is a Contraction). Let Q, Q0 be any two multi-objective Qvalue functions in the value space Q as defined above. Then, the Lipschitz condition d(T Q, T Q0 ) ≤
+γd(Q, Q0 ) holds, where γ ∈ [0, 1) is the discount factor of the underlying MOMDP M.
+Finally, we provide a generalized version of Banach’s Fixed-Point Theorem in the pseudo-metric
+space.
+Theorem 3 (Multi-Objective Banach Fixed-Point Theorem). If T is a contraction mapping with
+Lipschitz coefficient γ on the complete pseudo-metric space hQ, di, and Q∗ is defined as in Theorem
+1, then limn→∞ d(T n Q, Q∗ ) = 0 for any Q ∈ Q.
+Theorems 1-3 guarantee that iteratively applying optimality operator T on any MOQ-value function
+will terminate with a function Q that is equivalent to Q∗ under the measurement of pseudo-metric d.
+These Qs are as good as Q∗ since they all have the same utilities for each ω, and will only differ
+when the utility corresponds to a recess in the frontier (see Figure 2(c) for an example, at the recess,
+either D or F is optimal).
+Maintaining the envelope supω0 ω | Q(·, ·, ω 0 ) allows our method to quickly align one preference
+with optimal rewards and trajectories that may have been explored under other preferences, while
+scalarized updates that optimizes the scalar utility cannot use the information of maxa Q(s, a, ω 0 ) to
+update the optimal solution aligned with a different ω. As illustrated in Figure 2 (c), assuming we
+have found two optimal solutions D and F in the CCS, misaligned with preferences ω2 and ω1 . The
+scalarized update cannot use the information of maxa Q(s, a, ω1 ) (corresponding to F) to update
+the optimal solution aligned with ω2 or vice versa. It only searches along ω1 direction leading to
+non-optimal L, even if solution D has been seen under ω2 . Hence, the envelope updates can have
+better sample efficiency in theory, as is also seen from the empirical results.
+Learning Algorithm. Using the above theorems, we provide a sample-efficient learning algorithm
+for multi-objective RL (Algorithm 1). Since our goal is to induce a single model that can adapt to the
+entire space of Ω, we use one parameterized function to represent Q ⊆ (Ω → Rm )S×A . We achieve
+this by using a deep neural network with s, ω as input and |A| × m Q-values as output. We then
+minimize the following loss function at each step k:2
+h
+i
+2
+LA (θ) = Es,a,ω ky − Q(s, a, ω; θ)k2 ,
+(6)
+
+where y = Es0 [r + γ argQ maxa,ω0 ω | Q(s0 , a, ω 0 ; θk )], which empirically can be estimated by sampling transition (s, a, s0 , r) from a replay buffer.
+Optimizing LA directly is challenging in practice because the optimal frontier contains a large number
+of discrete solutions, which makes the landscape of loss function considerably non-smooth. To
+address this, we use an auxiliary loss function LB :
+LB (θ) = Es,a,ω [|ω | y − ω | Q(s, a, ω; θ)|].
+2
+
+We use double Q learning with target Q networks following Mnih et al. [34]
+
+5
+
+(7)
+
+Combined, our final loss function is L(θ) =
+(1 − λ) · LA (θ) + λ · LB (θ), where λ is a
+weight to trade off between losses LA and
+LBk . We slowly increase the value of λ from
+0 to 1, to shift our loss function from LA
+to LB . This method, known as homotopy
+optimization [12], is effective since for each
+update step, it uses the optimization result
+from the previous step as the initial guess. LA
+first ensures the prediction of Q is close to
+any real expected total reward, although it
+may not be optimal. LB provides an auxiliary
+pull along the direction with better utility.
+
+Algorithm 1: Envelope MOQ-Learning
+Input: a preference sampling distribution Dω , path pλ for
+the balance weight λ increasing from 0 to 1.
+Initialize replay buffer Dτ , network Qθ , and λ = 0.
+for episode = 1, . . . , M do
+Sample a linear preference ω ∼ Dω .
+for t = 0, . . . , N do
+Observe state st .
+Sample an action -greedily:
+(
+random action in A,
+w.p. ;
+at =
+maxa∈A ω | Q(st , a, ω; θ), w.p 1 − .
+Receive a vectorized reward rt and observe st+1 .
+Store transition (st , at , rt , st+1 ) in Dτ .
+if update then
+Sample Nτ transitions
+(sj , aj , rj , sj+1 ) ∼ Dτ .
+Sample Nω preferences W = {ωi ∼ Dω }.
+Compute yij = (T Q)ij =
+
+for terminal sj+1 ;
+rj ,
+rj + γ argQ max ωi| Q(sj+1 , a, ω 0 ; θ), o.w.
+
+a∈A,
+
+The loss function above has an expectation
+over ω – this entails sampling random preferences in the algorithm. However, since the
+ωs are decoupled from the transitions, we can
+increase sample efficiency by using a scheme
+similar to Hindsight Experience Replay [11].
+Furthermore, computing the optimality filter
+H over the entire Q is infeasible; instead we
+approximate this by applying H over a minibatch of transitions before performing parameter updates. Further details on our model
+architectures and implementation details are
+available in the supplementary material (Section A.2.3).
+
+ω 0 ∈W
+
+for all 1 ≤ i ≤ Nω and 1 ≤ j ≤ Nτ .
+Update Qθ by descending its stochastic
+gradient according to equations 6 and 7:
+∇θ L(θ) = (1−λ)·∇θ LA (θ)+λ·∇θ LB (θ).
+Increase λ along the path pλ .
+
+Policy adaptation. Once we obtain a policy model ΠL (ω) from the learning phase,
+the agent can adapt to any provided preference by simply feeding the ω into the network. While this
+is a straightforward scenario, we also consider a more challenging test where only scalar rewards are
+available and the agent has to uncover a hidden preference ω while adapting to the new task. For
+this case, we assume preferences are drawn from a truncated multivariable Gaussian distribution
+Dωm (µ1 , . . . , µm ; σ) on an (m−1)-simplex, where nonnegative parameters µ1 , . . . , µm are the means
+with µ1 + · · · + µm = 1, and σ is a fixed standard deviation for all dimensions. Our goal is then
+to infer the parameters of this Gaussian distribution, for which we perform a combination of policy
+gradient (e.g., REINFORCE [35]) and stochastic search while keeping the policy model fixed. We
+determine the best preference parameters that maximize the expected return in the target task:
+"
+"∞
+##
+X
+t
+arg max Eω∼Dωm Eτ ∼(P,ΠL (ω))
+γ rt (st , at ) .
+(8)
+µ1 ,...,µm
+
+4
+
+t=0
+
+Experiments
+
+Evaluation Metrics. Three metrics are to evaluate the empirical performance on test tasks:
+a) Coverage Ratio (CR). The first metric is coverage ratio (CR), which evaluates the agent’s ability to
+recover optimal solutions in the convex coverage set (CCS). If F ⊆ Rm is the set of solutions found by
+the agent (via sampled trajectories), we define F ∩ CCS := {x ∈ F | ∃y ∈ CCS s.t. kx−yk1 /kyk1 ≤
+} as the intersection between these sets with a tolerance of . The CR is then defined as:
+CRF1 (F) := 2 ·
+
+precision · recall
+,
+precision + recall
+
+(9)
+
+where the precision = |F ∩ CCS|/|F|, indicating the fraction of optimal solutions among the
+retrieved solutions, and the recall = |F ∩ CCS|/|CCS|, indicating the fraction of optimal instances
+that have been retrieved over the total amount of optimal solutions (see Figure 3(a)).
+6
+
+QUANTITY OF OBJECTIVE 2
+
+CCS
+
+A
+
+M
+
+B
+
+Retrieved Solutions
+
+C
+
+D
+K
+
+Non-optimal Solutions
+E
+
+L
+F
+
+Precision =
+
++
+
+Recall =
+
++
+
+G
+H
+
+QUANTITY OF OBJECTIVE 1
+
+QUANTITY OF OBJECTIVE 2
+
+b.
+
+a.
+
+b) Adaptation Error (AE). Our second metric compares the retrieved control frontier
+with the optimal one, when an agent is provided with a specific preference ω during
+the adaptation phase:
+
+!1
+
+Optimal Control
+Frontier
+
+<latexit sha1_base64="9Bu7KHoXXragPIuL8XXDhUOAfck=">AAACT3icfZFNSxxBEIZ71sSPMRo1Ry9NFkFkXWaCoEfRHHIJGnBVcJalprd2bLa/6O4JWYb9G17NX/LoL8ktpGcykKhgQcPT1W9XVb+dG8GdT5LHqLPw5u3i0vJKvPpubf39xubWpdOlZThgWmh7nYNDwRUOPPcCr41FkLnAq3x6Wp9ffUfruFYXfmZwKKFQfMIZ+JDKslzSTEssYJSONrpJP2mCvoS0hS5p43y0Ge1nY81KicozAc7dpInxwwqs50zgPM5KhwbYFAq8CahAohtWzdBzuhMyYzrRNizlaZP9/0YF0knwtz0aoJa4htxM5j2ay2ajjQqFatXTXn5yNKy4MqVHxf62mpSCek1rD+iYW2RezGicfcYwucWvocSZQQte270qA1tI+DEPLylo1qM1vybl6p80cLwTOgCzPNhA2S1YYD58QRwMTp/b+RIuP/XTpJ9+O+gen7RWL5Nt8pHskpQckmPyhZyTAWHEkDtyT35GD9Gv6HenlXaiFj6QJ9FZ+QMZE7Co</latexit>
+
+N
+
+D
+
+L
+
+Retrieved Control
+Frontier
+F
+
+!2
+<latexit sha1_base64="+UouUJfOmsYL+mxiFW/Pw7MTXn0=">AAACT3icfZFNSxxBEIZ7NsaPMfHzmEvjIoSwWWYkEI+iHryEGHBVcJalprd2bLa/6O4Rl2H/htf4lzz6S3IL6ZkMJCpY0PB09dtV1W/nRnDnk+Qx6rxZeLu4tLwSr757v7a+sbl17nRpGQ6YFtpe5uBQcIUDz73AS2MRZC7wIp8e1ecXN2gd1+rMzwwOJRSKTzgDH1JZlkuaaYkFjPZGG92knzRBX0LaQpe0cTrajD5nY81KicozAc5dpYnxwwqs50zgPM5KhwbYFAq8CqhAohtWzdBzuhsyYzrRNizlaZP9/0YF0knw1z0aoJa4htxM5j2ay2ajjQqFatXTXn6yP6y4MqVHxf62mpSCek1rD+iYW2RezGicHWOY3OK3UOK7QQte209VBraQcDsPLylo1qM1vybl6p80cLwbOgCzPNhA2TVYYD58QRwMTp/b+RLO9/pp0k9/fOkeHLZWL5MPZId8JCn5Sg7ICTklA8KIIXfkJ7mPHqJf0e9OK+1ELWyTJ9FZ+QMa87Cp</latexit>
+
+Control Errors
+QUANTITY OF OBJECTIVE 1
+
+AE(C) := Eω∼Dω [|C(ω)−Copt (ω)|/Copt (ω)],
+(10) Figure 3: Illustration of evaluation metrics for MORL. (a.)
+which is the expected relative error be- Coverage ratio (CR) measures an agent’s ability to find all
+tween optimal control frontier Copt : Ω → the potential optimal solutions in the convex coverage set of
+R with ω 7→ maxr̂∈CCS ω | r̂ and the Pareto frontier. Dots with black boundary are solutions in
+CCS, dots without black boundary are non-optimal returns,
+agent’s control frontier Cπω = ω | r̂πω .
+c) Average Utility (UT). This measures
+the average utility obtained by the trained
+agent on randomly sampled preferences
+and is a useful proxy to AE when we don’t
+have access to the optimal policy.
+Domains. We evaluate on four different
+domains (complete details in supplementary material):
+
+and dots in green are solutions retrieved by an MORL algorithm. CR is the F1 based on the precision and recall calculation. (b.) Adaptation error (AE) measures an agent’s ability of
+policy adaptation to real-time specified preferences. The gray
+curve indicates the theoretical limit of the best cumulative
+utilities under all preference, and the green curve indicates the
+cumulative utilities of an MORL algorithm. AE is the average
+gap between these two curves over all preferences.
+
+1. Deep Sea Treasure (DST) A classic MORL benchmark [14] in which an agent controls a
+submarine searching for treasures in a 10 × 11-grid world while trading off time-cost and
+treasure-value. The grid world contains 10 treasures of different values. Their values increase
+as their distances from the starting point s0 = (0, 0) increase. We ensure the Pareto frontier of
+this environment to be convex.
+2. Fruit Tree Navigation (FTN) A full binary tree of depth d with randomly assigned vectorial
+reward r ∈ R6 on the leaf nodes. These rewards encode the amounts of six different components
+of nutrition of the fruits on the tree: {Protein, Carbs, Fats, Vitamins, Minerals, Water}.
+For every leaf node, ∃ω for which its reward is optimal, thus all leaves lie on the CCS. The goal
+of our MORL agent is to find a path from the root to a leaf node that maximizes utility for a given
+preference, choosing between left or right subtrees at every non-terminal node.
+3. Task-Oriented Dialog Policy Learning (Dialog) A modified task-oriented dialog system in the
+restaurant reservation domain based on PyDial [36]. We consider the task success rate and the
+dialog brevity (measured by number of turns) as two competing objectives of this domain.
+4. Multi-Objective SuperMario Game (SuperMario) A multi-objective version of the popular
+video game Super Mario Bros. We modify the open-source environment from OpenAI gym [37]
+to provide vectorized rewards encoding five different objectives: x-pos: value corresponding
+to the difference in Mario’s horizontal position between current and last time point, time: a
+small negative time penalty, deaths: a large negative penalty given each time Mario dies , coin:
+rewards for collecting coins, and enemy: rewards for eliminating an enemy.
+Baselines. We compare our envelope MORL algorithm with classic and state-of-the-art baselines:
+1. MOFQI [24]: Multi-objective fitted Q-iteration where the Q-approximator is a large linear model.
+2. CN+OLS [13]: Conditional neural network with Optimistic Linear Support (OLS) method as the
+outer loop for selecting ω. This method is first proposed in [9] with multiple neural networks,
+and we employ an improved version using single conditional neural network [13].
+3. Scalarized [13]: The state-of-the-art algorithm uses scalarized Q-update with double Q-learning,
+prioritized and hindsight experience replay, which is equivalent to CN+DER proposed in [13].
+Main Results. Table 1 shows the performance comparison of different MORL algorithms in four
+domains. We elaborate training and test details for each domain in supplementary material. In DST
+and FTN we compare CR and AE as defined in section 4. In the task-oriented dialog policy learning
+task, we compare the average utility (Avg. UT) for 5,000 test dialogues with uniformly sampled user
+preferences on success and brevity. In the SuperMario game, the Avg. UT is over 500 test episodes
+7
+
+MOFQI
+CN+OLS
+Scalarized
+Envelope (ours)1
+
+FTN (d = 6)
+
+DST
+
+Method
+CR ↑
+
+0.639 ± 0.421
+0.751 ± 0.163
+0.989 ± 0.024
+0.994 ± 0.001
+
+AE ↓
+
+139.6 ± 25.98
+34.63 ± 1.396
+0.165 ± 0.096
+0.152 ± 0.006
+
+CR ↑
+
+0.197 ± 0.000
+–
+0.914 ± 0.044
+0.987 ± 0.021
+
+AE ↓
+
+0.176 ± 0.001
+–
+0.016 ± 0.005
+0.006 ± 0.001
+
+Dialog2
+
+SuperMario2
+
+Avg.UT ↑
+
+Avg.UT ↑
+
+2.17 ± 0.21
+2.53 ± 0.22
+2.38 ± 0.22
+2.65 ± 0.22
+
+–
+–
+162.7 ± 77.66
+321.2 ± 146.9
+
+Table 1: Comparison of different MORL algorithms in learning and adaptation phases across four experimental
+domains. ↑ indicates higher is better, and ↓ indicates lower is better for the scores. Each data point indicates the
+mean and standard deviation over 5 independent training and test runs. 1 Using the unpaired t-test, we obtain
+significance scores of p < 0.05 vs MOFQI on all domains, p < 0.01 vs CN+OLS on DST and p < 0.05 vs
+Scalarized on FTN, Dialog and SuperMario. 2 Additional results are in the supplementary material C.4 and C.5.
+
+with uniformly sampled preferences. The envelope algorithm steadily achieves the best performance
+in terms of both learning and adaptation among all the MORL methods in all four domains.
+1.0
+
+0.06
+
+0.9
+
+0.05
+0.04
+
+0.8
+
+0.03
+0.7
+
+0.02
+
+0.6
+0.5
+
+a.
+
+0.01
+1
+
+10
+
+1
+
+100
+
+10
+
+100
+
+b.
+
+Figure 4: Coverage Ratio (CR) and Adaptation Error (AE) comparison of the scalarized algorithm [13] and our
+envelope deep MORL algorithm over 5000 episodes of FTN tasks of depths d = 5, 6, 7. Higher CR indicates
+better coverage of optimal policies, lower AE indicates better adaptation. The error bars are standard deviations
+of CR and AE estimated from 5 independent runs under each configuration.
+
+Scalability. There are three aspects of the scalability of a MORL algorithm: the ability to deal
+with (1) large state space, (2) many objectives, and (3) large optimal policy set. Unlike other neural
+network-based methods, MOFQI cannot deal with the large state space, e.g., the video frames in
+SuperMario Game. The CN+OLS baseline requires solving all the intersection points of a set of
+hyper-planes thus is computationally intractable in domains with m > 3 objectives, such as FTN
+and SuperMario. We denote these entries as “–" in Table 1. Both scalarized and envelope methods
+can be applied to cases having large state space and reasonably many objectives. However, the size
+of optimal policy set may affect the performance of these algorithms. Figure 4 shows CR and AE
+results in three FTN environments with d = 5 (with 32 solutions), d = 6 (with 64 solutions), and
+d = 7 (with 128 solutions). We observe that both scalarized and envelope algorithms are close to
+optimal when d = 5 but both CR and AE values are worse for d = 7. However, the envelope version
+is more stable and outperforms the scalarized MORL algorithm in all three cases. These results point
+to the robustness and scalability of our algorithms.
+Sample Efficiency. To compare sample efficiency during the learning phase, we train both our
+scalarized and envelope deep MORL on the FTN task with different depths for 5,000 episodes. We
+compute coverage ratio (CR) over 2,000 episodes and adaptation error (AE) over 5,000 episodes.
+Figure 4 shows plots for the metrics computed over a varying number of sampled preferences Nω
+(more details can be found in the supplementary material). Each point on the curve is averaged over
+5 experiments. We observe that the envelope MORL algorithm consistently has a better CR and AE
+scores than the scalarized version, with smaller variances. As Nω increases, CR increases and AE
+decreases, which shows better use of historical interactions for both algorithms when Nω is larger.
+And to achieve the same level AE the envelope algorithm requires smaller Nω than the scalarized
+algorithm. This reinforces our theoretical analysis that the envelope MORL algorithm has better
+sample efficiency than the scalarized version.
+Policy Adaptation. We show how the MORL agents respond to user preference during the adaptation phase in the dialog policy learning task, where the agent must trade off between the dialog
+success rate and the conversation brevity. Figure 5 shows the success rate (SR) curves as we vary the
+8
+
+v1
+v2
+v3
+v4
+v5
+v6
+
+Protein
+0.9639
+0.
+0.0539
+0.1366
+0.
+0.
+
+Carbs
+0.
+0.9067
+0.
+0.0459
+0.0148
+0.0505
+
+Fats
+0.0361
+0.
+0.9461
+0.
+0.0291
+0.
+
+Vitamins
+0.
+0.
+0.
+0.7503
+0.0428
+0.
+
+Minerals
+0.
+0.
+0.
+0.0671
+0.7503
+0.
+
+Water
+0.
+0.0933
+0.
+0.
+0.1629
+0.9495
+
+Table 2: Inferred preferences of the envelope
+MOQ-learning algorithm on different FTN (d = 6)
+tasks (v1 to v6) after only 15 episodes interaction.
+The underlying preferences are all ones on the diagonal of the table and zeros for the off-diagonal.
+
+x-pos
+0.5288
+0.1985
+0.2196
+0.0211
+0.0715
+
+g1
+g2
+g3
+g4
+g5
+
+time
+0.1770
+0.2237
+0.1296
+0.2404
+0.1038
+
+life
+0.1500
+0.2485
+0.3541
+0.0211
+0.2069
+
+coin
+0.0470
+0.1422
+0.1792
+0.6960
+0.3922
+
+enemy
+0.0972
+0.1868
+0.1175
+0.0211
+0.2253
+
+Table 3: Inferred preferences of the envelope
+multi-objective A3C algorithm in different Mario
+Game variants (g1 to g5) with 100 episodes. The
+underlying preferences are all ones on the diagonal
+of the table and zeros for the off-diagonal.
+
+weight of the preference on task completion success. The success rates of both MORL algorithms
+increase as the user’s weight on success increases, while those of the single-objective algorithms do
+not change. This shows that our envelope MORL agent can adapt gracefully to the user’s preference.
+Furthermore, our envelope deep MORL algorithm outperforms other algorithms whenever success is
+relatively more important to the user (weight > 0.5).
+95
+
+Success Rate (%)
+
+Revealing underlying preferences. Finally, we
+90
+test the ability of our agent to infer and adapt to unknown preferences on FTN and SuperMario. During
+85
+the learning phase, the agent does not know the under80
+lying preference, and hence learns a multi-objective
+policy. During the adaptation phase, our agent per75
+forms recovers underlying preferences (as described
+70
+in Section 3) to uncover the underlying preference
+0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9
+that maximizes utility. Table 2 shows the learned
+ZHLJKW RI VXFFHVV
+Weight of Success
+preferences for 6 different FTN tasks (v1 to v6)
+with unknown one-hot preferences [1, 0, 0, 0, 0, 0] Figure 5: The success-weight curves of taskoriented dialog. Each data point is a moving averto [0, 0, 0, 0, 0, 1], respectively, meaning the agent age of closest around 500 dialogues in the interval
+should only care about one elementary nutrition. of around ± 0.05 weight of success. The light
+These were learned in a few-shot adaption setting, shadow indicates the standard deviations of 5 indeusing just 15 episodes. For the SuperMario Game, pendent runs under each configuration.
+we implement an A3C [38] variant of our envelope
+MORL agent (see supplementary material for details). Table 3 shows the learned preferences for 5
+different tasks (g1 to g5) with unknown one-hot preferences using just 100 episodes.
+Envelope Version
+Scalarized
+Version
+Envelope
+Version
+
+Scalarized Version
+Single-Obj(0.5turn+0.5succ)
+Single-Obj(0.5turn+0.5succ)
+Single-Obj(0.2turn+0.8succ)
+Single-Obj(0.2turn+0.8succ)
+Single-Obj(0.8turn+0.2succ)
+Single-Obj(0.8turn+0.2succ)
+
+ZHLJKW RI VXFFHVV
+
+We observe that the learned preferences are concentrated on the diagonal, indicating good alignment
+with the actual underlying preferences. For example, in the SuperMario game variant g4, the envelope
+MORL agent finds the preference with the highest weight (0.6960) on the coin objective can best
+describe the goal of g4, which is to collect as many coins as possible. We also tested policy adaptation
+on the original Mario game using game scores for the scalar rewards. We find that the agent learns
+preference weights of 0.37 for x-pos and 0.23 for time, which seems consistent with a common
+strategy that humans employ – simply move Mario towards the flag as quickly as possible.
+
+5
+
+Conclusion
+
+We have introduced a new algorithm for multi-objective reinforcement learning (MORL) with linear
+preferences, with the goal of enabling few-shot adaptation of autonomous agents to new scenarios.
+Specifically, we propose a multi-objective version of the Bellman optimality operator, and utilize it to
+learn a single parametric representation for all optimal policies over the space of preferences. We
+provide convergence proofs for our multi-objective algorithm and also demonstrate how to use our
+model to adapt and elicit an unknown preference on a new task. Our experiments across four different
+domains demonstrate that our algorithms exhibit effective generalization and policy adaptation.
+
+Acknowledgements
+The authors would like to thank Yexiang Xue at Purdue University, Carla Gomes at Cornell University
+for helpful discussions on multi-objective optimization, Lu Chen, Kai Yu at Shanghai Jiao Tong
+University for discussing dialogue applications, Haoran Cai at MIT for helping running a part of
+synthetic experiments, and anonymous reviewers for constructive suggestions.
+9
+
+References
+[1] Dario Amodei, Chris Olah, Jacob Steinhardt, Paul Christiano, John Schulman, and Dan Mané. Concrete
+problems in ai safety. arXiv preprint arXiv:1606.06565, 2016.
+[2] Diederik M. Roijers, Peter Vamplew, Shimon Whiteson, and Richard Dazeley. A survey of multi-objective
+sequential decision-making. J. Artif. Intell. Res., 48:67–113, 2013.
+[3] Il Yong Kim and OL De Weck. Adaptive weighted sum method for multiobjective optimization: a new
+method for pareto front generation. Structural and multidisciplinary optimization, 31(2):105–116, 2006.
+[4] Abdullah Konak, David W Coit, and Alice E Smith. Multi-objective optimization using genetic algorithms:
+A tutorial. Reliability Engineering & System Safety, 91(9):992–1007, 2006.
+[5] Hirotaka Nakayama, Yeboon Yun, and Min Yoon. Sequential approximate multiobjective optimization
+using computational intelligence. Springer Science & Business Media, 2009.
+[6] JiGuan G Lin. On min-norm and min-max methods of multi-objective optimization. Mathematical
+programming, 103(1):1–33, 2005.
+[7] Sriraam Natarajan and Prasad Tadepalli. Dynamic preferences in multi-criteria reinforcement learning. In
+Luc De Raedt and Stefan Wrobel, editors, Machine Learning, Proceedings of the Twenty-Second International Conference (ICML 2005), Bonn, Germany, August 7-11, 2005, volume 119 of ACM International
+Conference Proceeding Series, pages 601–608. ACM, 2005.
+[8] Leon Barrett and Srini Narayanan. Learning all optimal policies with multiple criteria. In William W.
+Cohen, Andrew McCallum, and Sam T. Roweis, editors, Machine Learning, Proceedings of the TwentyFifth International Conference (ICML 2008), Helsinki, Finland, June 5-9, 2008, volume 307 of ACM
+International Conference Proceeding Series, pages 41–47. ACM, 2008.
+[9] Hossam Mossalam, Yannis M. Assael, Diederik M. Roijers, and Shimon Whiteson. Multi-objective deep
+reinforcement learning. CoRR, abs/1610.02707, 2016.
+[10] Richard Ernest Bellman. Dynamic Programming. Princeton University Press, Princeton, NJ, USA, 1957.
+[11] Marcin Andrychowicz, Dwight Crow, Alex Ray, Jonas Schneider, Rachel Fong, Peter Welinder, Bob
+McGrew, Josh Tobin, Pieter Abbeel, and Wojciech Zaremba. Hindsight experience replay. In Advances in
+Neural Information Processing Systems 30: Annual Conference on Neural Information Processing Systems
+2017, 4-9 December 2017, Long Beach, CA, USA, pages 5055–5065, 2017.
+[12] Layne T Watson and Raphael T Haftka. Modern homotopy methods in optimization. Computer Methods
+in Applied Mechanics and Engineering, 74(3):289–305, 1989.
+[13] Axel Abels, Diederik M. Roijers, Tom Lenaerts, Ann Nowé, and Denis Steckelmacher. Dynamic weights
+in multi-objective deep reinforcement learning. In Proceedings of the 36th International Conference on
+Machine Learning, page TBA, 2019.
+[14] Peter Vamplew, Richard Dazeley, Adam Berry, Rustam Issabekov, and Evan Dekker. Empirical evaluation
+methods for multiobjective reinforcement learning algorithms. Machine Learning, 84(1-2):51–80, 2011.
+[15] Chunming Liu, Xin Xu, and Dewen Hu. Multiobjective reinforcement learning: A comprehensive overview.
+IEEE Trans. Systems, Man, and Cybernetics: Systems, 45(3):385–398, 2015.
+[16] Shie Mannor and Nahum Shimkin. The steering approach for multi-criteria reinforcement learning. In
+Thomas G. Dietterich, Suzanna Becker, and Zoubin Ghahramani, editors, Advances in Neural Information
+Processing Systems 14 [Neural Information Processing Systems: Natural and Synthetic, NIPS 2001,
+December 3-8, 2001, Vancouver, British Columbia, Canada], pages 1563–1570. MIT Press, 2001.
+[17] Gerald Tesauro, Rajarshi Das, Hoi Chan, Jeffrey O. Kephart, David Levine, Freeman L. Rawson III,
+and Charles Lefurgy. Managing power consumption and performance of computing systems using
+reinforcement learning. In John C. Platt, Daphne Koller, Yoram Singer, and Sam T. Roweis, editors,
+Advances in Neural Information Processing Systems 20, Proceedings of the Twenty-First Annual Conference
+on Neural Information Processing Systems, Vancouver, British Columbia, Canada, December 3-6, 2007,
+pages 1497–1504. Curran Associates, Inc., 2007.
+[18] Kristof Van Moffaert, Madalina M. Drugan, and Ann Nowé. Scalarized multi-objective reinforcement
+learning: Novel design techniques. In Proceedings of the 2013 IEEE Symposium on Adaptive Dynamic
+Programming and Reinforcement Learning, ADPRL 2013, IEEE Symposium Series on Computational
+Intelligence (SSCI), 16-19 April 2013, Singapore, pages 191–199. IEEE, 2013.
+
+10
+
+[19] Matteo Pirotta, Simone Parisi, and Marcello Restelli. Multi-objective reinforcement learning with continuous pareto frontier approximation. In Blai Bonet and Sven Koenig, editors, Proceedings of the Twenty-Ninth
+AAAI Conference on Artificial Intelligence, January 25-30, 2015, Austin, Texas, USA., pages 2928–2934.
+AAAI Press, 2015.
+[20] Simone Parisi, Matteo Pirotta, and Jan Peters. Manifold-based multi-objective policy search with sample
+reuse. Neurocomputing, 263:3–14, 2017.
+[21] Kazuyuki Hiraoka, Manabu Yoshida, and Taketoshi Mishima. Parallel reinforcement learning for weighted
+multi-criteria model with adaptive margin. In Masumi Ishikawa, Kenji Doya, Hiroyuki Miyamoto, and
+Takeshi Yamakawa, editors, Neural Information Processing, 14th International Conference, ICONIP 2007,
+Kitakyushu, Japan, November 13-16, 2007, Revised Selected Papers, Part I, volume 4984 of Lecture Notes
+in Computer Science, pages 487–496. Springer, 2007.
+[22] Hitoshi Iima and Yasuaki Kuroe. Multi-objective reinforcement learning for acquiring all pareto optimal
+policies simultaneously - method of determining scalarization weights. In 2014 IEEE International
+Conference on Systems, Man, and Cybernetics, SMC 2014, San Diego, CA, USA, October 5-8, 2014, pages
+876–881. IEEE, 2014.
+[23] Andrea Castelletti, Francesca Pianosi, and Marcello Restelli. Multi-objective fitted q-iteration: Pareto
+frontier approximation in one single run. In Proceedings of the IEEE International Conference on
+Networking, Sensing and Control, ICNSC 2011, Delft, The Netherlands, 11-13 April 2011, pages 260–265.
+IEEE, 2011.
+[24] Andrea Castelletti, Francesca Pianosi, and Marcello Restelli. Tree-based fitted q-iteration for multiobjective markov decision problems. In The 2012 International Joint Conference on Neural Networks
+(IJCNN), Brisbane, Australia, June 10-15, 2012, pages 1–8. IEEE, 2012.
+[25] Wolfram Conen and Tuomas Sandholm. Preference elicitation in combinatorial auctions. In Proceedings
+of the 3rd ACM conference on Electronic Commerce, pages 256–259. ACM, 2001.
+[26] Craig Boutilier. A POMDP formulation of preference elicitation problems. In Proceedings of the Eighteenth
+National Conference on Artificial Intelligence and Fourteenth Conference on Innovative Applications of
+Artificial Intelligence, July 28 - August 1, 2002, Edmonton, Alberta, Canada., pages 239–246, 2002.
+[27] Li Chen and Pearl Pu. Survey of preference elicitation methods. Technical report, 2004.
+[28] Andrew Y. Ng and Stuart J. Russell. Algorithms for inverse reinforcement learning. In Pat Langley, editor,
+Proceedings of the Seventeenth International Conference on Machine Learning (ICML 2000), Stanford
+University, Stanford, CA, USA, June 29 - July 2, 2000, pages 663–670. Morgan Kaufmann, 2000.
+[29] Pieter Abbeel and Andrew Y. Ng. Apprenticeship learning via inverse reinforcement learning. In Carla E.
+Brodley, editor, Machine Learning, Proceedings of the Twenty-first International Conference (ICML 2004),
+Banff, Alberta, Canada, July 4-8, 2004, volume 69 of ACM International Conference Proceeding Series.
+ACM, 2004.
+[30] Jonathan Ho and Stefano Ermon. Generative adversarial imitation learning. In Daniel D. Lee, Masashi
+Sugiyama, Ulrike von Luxburg, Isabelle Guyon, and Roman Garnett, editors, Advances in Neural Information Processing Systems 29: Annual Conference on Neural Information Processing Systems 2016,
+December 5-10, 2016, Barcelona, Spain, pages 4565–4573, 2016.
+[31] Urszula Chajewska, Daphne Koller, and Dirk Ormoneit. Learning an agent’s utility function by observing
+behavior. In Proceedings of the Eighteenth International Conference on Machine Learning (ICML 2001),
+Williams College, Williamstown, MA, USA, June 28 - July 1, 2001, pages 35–42, 2001.
+[32] Christopher J. C. H. Watkins and Peter Dayan. Technical note q-learning. Machine Learning, 8:279–292,
+1992.
+[33] Arch W Naylor and George R Sell. Linear operator theory in engineering and science. Springer Science
+& Business Media, 2000.
+[34] Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A. Rusu, Joel Veness, Marc G. Bellemare,
+Alex Graves, Martin A. Riedmiller, Andreas Fidjeland, Georg Ostrovski, Stig Petersen, Charles Beattie,
+Amir Sadik, Ioannis Antonoglou, Helen King, Dharshan Kumaran, Daan Wierstra, Shane Legg, and Demis
+Hassabis. Human-level control through deep reinforcement learning. Nature, 518(7540):529–533, 2015.
+[35] Ronald J. Williams. Simple statistical gradient-following algorithms for connectionist reinforcement
+learning. Machine Learning, 8:229–256, 1992.
+
+11
+
+[36] Stefan Ultes, Lina Maria Rojas-Barahona, Pei-Hao Su, David Vandyke, Dongho Kim, Iñigo Casanueva,
+Pawel Budzianowski, Nikola Mrksic, Tsung-Hsien Wen, Milica Gasic, and Steve J. Young. Pydial: A multidomain statistical dialogue system toolkit. In Proceedings of the 55th Annual Meeting of the Association
+for Computational Linguistics, ACL 2017, Vancouver, Canada, July 30 - August 4, System Demonstrations,
+pages 73–78, 2017.
+[37] Christian Kauten.
+Super Mario Bros for OpenAI Gym.
+gym-super-mario-bros, 2018.
+
+https://github.com/Kautenja/
+
+[38] Volodymyr Mnih, Adrià Puigdomènech Badia, Mehdi Mirza, Alex Graves, Timothy P. Lillicrap, Tim
+Harley, David Silver, and Koray Kavukcuoglu. Asynchronous methods for deep reinforcement learning. In
+Proceedings of the 33nd International Conference on Machine Learning, ICML 2016, New York City, NY,
+USA, June 19-24, 2016, pages 1928–1937, 2016.
+[39] Mohamed A Khamsi and William A Kirk. An introduction to metric spaces and fixed point theory,
+volume 53. John Wiley & Sons, 2011.
+[40] Dimitri P. Bertsekas. Regular policies in abstract dynamic programming. SIAM Journal on Optimization,
+27(3):1694–1727, 2017.
+[41] Dimitri P Bertsekas. Abstract dynamic programming. Athena Scientific Belmont, MA, 2018.
+[42] Marc G. Bellemare, Will Dabney, and Rémi Munos. A distributional perspective on reinforcement learning.
+In Proceedings of the 34th International Conference on Machine Learning, ICML 2017, Sydney, NSW,
+Australia, 6-11 August 2017, pages 449–458, 2017.
+[43] Jost Schatzmann and Steve J. Young. The hidden agenda user simulation model. IEEE Trans. Audio,
+Speech & Language Processing, 17(4):733–747, 2009.
+[44] Stefan Ultes, Pawel Budzianowski, Iñigo Casanueva, Nikola Mrksic, Lina Maria Rojas-Barahona, Pei-Hao
+Su, Tsung-Hsien Wen, Milica Gasic, and Steve J. Young. Reward-balancing for statistical spoken dialogue
+systems using multi-objective reinforcement learning. In Proceedings of the 18th Annual SIGdial Meeting
+on Discourse and Dialogue, Saarbrücken, Germany, August 15-17, 2017, pages 65–70, 2017.
+[45] Timothy P. Lillicrap, Jonathan J. Hunt, Alexander Pritzel, Nicolas Heess, Tom Erez, Yuval Tassa, David
+Silver, and Daan Wierstra. Continuous control with deep reinforcement learning. CoRR, abs/1509.02971,
+2015.
+[46] Shixiang Gu, Timothy P. Lillicrap, Ilya Sutskever, and Sergey Levine. Continuous deep q-learning with
+model-based acceleration. In Proceedings of the 33nd International Conference on Machine Learning,
+ICML 2016, New York City, NY, USA, June 19-24, 2016, pages 2829–2838, 2016.
+[47] Luke Metz, Julian Ibarz, Navdeep Jaitly, and James Davidson. Discrete sequential prediction of continuous
+actions for deep RL. CoRR, abs/1705.05035, 2017.
+[48] Hado van Hasselt, Arthur Guez, and David Silver. Deep reinforcement learning with double q-learning.
+In Dale Schuurmans and Michael P. Wellman, editors, Proceedings of the Thirtieth AAAI Conference on
+Artificial Intelligence, February 12-17, 2016, Phoenix, Arizona, USA., pages 2094–2100. AAAI Press,
+2016.
+[49] Tom Schaul, John Quan, Ioannis Antonoglou, and David Silver. Prioritized experience replay. CoRR
+(Published at ICLR 2016), abs/1511.05952, 2015.
+[50] L.J.P van der Maaten and G.E. Hinton. Visualizing high-dimensional data using t-sne. Journal of Mahcine
+Learning Research, Nov 2008.
+
+12
+
+Supplementary Material for Generalized Algorithm for
+Multi-Objective RL and Policy Adaptation
+A
+
+Theoretical Framework for Value-Based MORL Algorithms
+
+In this section, we introduce a theoretical framework for analyzing and designing the value-based multi-objective
+reinforcement learning algorithms. This framework is based on the well-known Banach’s Fixed-Point Theorem,
+which guarantees the existence and uniqueness of fixed-point of a contraction on a complete metric space.
+Therefore, generalizing this theorem a bit, we can imagine all value functions of reinforcement learning are in
+some metric space, and finding the optimal value or policy is to find the fixed point of a certain contraction on
+that space. We first recall the following concepts.
+
+A.1
+
+General Framework for Value-Based Reinforcement Learning
+
+Definition 1 (Contraction). Let (X, d) be a metric space. We say that T is a contraction, if there is a real
+number γ ∈ [0, 1) such that
+d(T (x), T (x0 )) ≤ γd(x, x0 )
+(11)
+for all points x, x0 ∈ X, where γ is called a Lipschitz coefficient for the contraction T .
+Theorem 4 (Banach’s Fixed-Point Theorem). Let (X, d) be a complete metric space and let T : X → X be a
+contraction. Then there exists a unique fixed point x∗ ∈ X such that T (x∗ ) = x∗ . Moreover, if x is any point
+in X and T n (x) is inductively defined by T n (x) = T (T n−1 (x)), then we have T n (x) → x∗ as n → ∞.
+The above introduced Banach fixed-point theorem is well-known. Readers may refer to the book [39] for more
+details. Practically, this provides us with an iterative method for converging to any desired solution in the large
+solution space, by repeatedly applying a properly designed contraction. For example, the foundation for standard
+value-based single-objective reinforcement learning is the use of Bellman’s optimality equation [10]:
+Q∗ (s, a) = r(s, a) + γEs0 ∼P(·|s,a) sup Q∗ (s0 , a0 ),
+
+(12)
+
+a0 ∈A
+
+where γ ∈ [0, 1) is the discount factor and the optimal Q-value function Q∗ (s, a) is the desired solution in the
+space Q ⊆ RS×A consisting of all the bounded functions with `∞ -distance metric
+d(Q, Q0 ) :=
+
+|Q(s, a) − Q0 (s, a)|.
+
+sup
+
+(13)
+
+s∈S,a∈A
+
+Since the all the functions in this space is bounded, it follows that with this `∞ -distance metric, the space (Q, d)
+is complete. Besides, according to the equation (12), we can design an Bellman optimality operator T such that
+(T Q)(s, a) := r(s, a) + γEs0 ∼P(·|s,a) sup Q(s0 , a0 ),
+
+(14)
+
+a0 ∈A
+
+which can be shown as a contraction on (Q, d). Many popular value-based reinforcement algorithms, such as
+deep Q-learning [34], can be seen as asynchronous iteration methods with approximately applied contraction.
+We can verify that the Bellman optimality operator T indeed is a contraction on (Q, d), and the optimal value
+function Q∗ is a fixed point in (Q, d). Therefore, we can find the unique optimal Q-value function by applying the
+optimality operator iteratively many times on any initial Q-value function. Similarly, we can also define Bellman
+evaluation operator Tπ using the Bellman expectation equation (Tπ Q)(s, a) := r(s, a) + γEτ ∼(P,π) Q(s0 , a0 ),
+which is also a contraction.
+Knowing that the optimality operator is a contraction is important. In practice, we use a minibatch to update
+previous Q-value function approximated by neural networks, not updating all states and actions. Thus the
+updated Q-value function is not a strict T Q, but only close to T Q on some state and action pairs. We can still
+provide a theoretical guarantee that a minibatch iterative algorithm can still converge to a promising result, under
+certain extra assumptions.
+Definition 2 (Minibatch Iteration). Consider the Q-value function Q as a composition of {QS,A }S⊆S,A⊆A
+such that in each iteration,
+(
+T QkS,A (s, a), if s ∈ S and a ∈ A;
+k+1
+QS,A (s, a) :=
+QkS,A (s, a),
+otherwise.
+
+13
+
+Theorem 5 (Minibatch Convergence Theorem). Suppose each restricted Q-value function QS,A can be update
+an arbitrary number of times, and there is a nest sequence of nonempty sets {Qk }k∈Z with Qk+1 ⊆ Qk ⊆ Q,
+k = 0, 1, . . . such that if {Qk }k∈N is any sequence with Qk ∈ Qk for all k ≥ 0, then {Qk } converges
+pointwisely to Q∗ . Assume further the following:
+1. Convergence Condition: We have
+∀Q ∈ Qk , T Q ∈ Qk+1 ;
+
+(15)
+
+2. Box Condition: For all k, Qk is a Cartesian product of the form
+Qk = ×s∈S,a∈A Qk{s},{a} ,
+
+(16)
+
+where QkS,A is a set of bounded real-valued functions on states S and actions A.
+Then for every Q0 ∈ Q0 the sequence {Qk } generated by the minibatch iteration algorithm converges to
+Q∗ [40].
+Proof. Showing the convergence of the algorithm is equivalent to showing that the iterations of elements from
+Qk will get in to Qk+1 eventually, i.e., for each k ≥ 0, there is a time tk such that Qt ∈ Qk for all t ≥ tk . We
+can prove it by mathematical induction.
+When k = 0, the statement is true since Q0 ∈ Q0 . Assuming the statement is true for a given k, we will show
+there is a time tk+1 with the required properties. For each s ∈ S, a ∈ A, let set Ls,a = {t : st = s, at = a}
+record the time a minibatch update happens on the state s and action a. Let t(s, a) be the first element in Ls,a
+such that t(s, a) ≥ tk . Then by the convergence condition, we have T Qt(s,a) ∈ Qk+1 for all s ∈ S and a ∈ A.
+In the view of the box condition, it implies Qt+1 (s, a) ∈ Qk+1
+s,a for all t ≥ t(s, a) for any s ∈ S and a ∈ A.
+Therefore, let tk+1 = maxs,a t(s, a) + 1, using the box condition, we have Qt ∈ Qk+1 for all t ≤ tk+1 . By
+mathematical induction, the statement holds, and Qk will shrink in to Qk+1 eventually. Hence, we have proved
+{Qt } converges to Q∗ finally.
+
+The above theorem indicates that minibatch update with experience replay will not affect the convergence of
+iteratively applying the optimality operator T . This gives us the flexibility to design value-based algorithm’s
+updating scheme. Besides, even though we use deep Q-network to approximate the Q-value function and
+update it by using gradient descent, this will not impair the magical function of optimality operator too much.
+This is because if after n-round neural network updates, we always have sups∈S,a∈A Qt+n − T Qt ≤ ,
+where n is an arbitrary bounded integer, by applying the triangle inequality we conclude that the final error
+d(Qf inal , Q∗ ) ≤ /(1 − γ) is bounded.
+We summarize a general theoretical framework for value-based RL algorithm design, which consists of five
+elements:
+• Value Space X : A common choice of X is the space of value functions in RS or the space of Q-value
+functions in RS×A . There are many other choices such as the space of ordered pair of (V, Q) (see 2.6.2 in
+book [41] for example), or the space of vectorized value functions as we show in the following sections.
+• Value Metric d: It defines the “distance" between two points in the value space. Besides the basic four
+requirements, the metric d should ensure a complete metric space (X , d) to validate the Banach’s fixed-point
+theorem. A compatible selection of value metric will make the convergence analysis easier.
+• Evaluation Operator Tπ : We have constructed a recursive expression of a certain value point in the value
+space associated with some policy, e.g., the Bellman expectation equation, to depict the value of a policy vπ
+as a fixed point we desire. Carefully verify that the contraction property holds for Tπ .
+• Optimality Operator T : A recursive expression of the optimal point in the value space, e.g., the Bellman
+optimality equation. Note that when the metric d is the supremum of the absolute value of the difference,
+and Tπ is a contraction, we can prove the contraction property of T is always automatically satisfied.
+• Updating Scheme: To make a reinforcement learning algorithm practical and scalable, we need to consider
+many factors in terms of updating scheme. For example: How do we approximate the value and policies? If
+it is an online algorithm, how do we trade off exploration and exploitation? All these details will significantly
+influence the performance of our algorithm on real-world tasks.
+In summary, there are five essential components for analyzing and designing general value-base reinforcement
+learning algorithms: (1) value space, (2) value metric, (3) evaluation operator, (4) optimality operator, and
+(5) updating scheme. In fact, there is some work [42] developing distributional reinforcement learning in a
+way similar to this framework. We will discuss how to design these five elements of our framework to develop
+envelope multi-objective reinforcement learning algorithms in the next section.
+
+14
+
+A.2
+
+MORL with envelope updates
+
+The deep MORL algorithm with scalarized update is capable of solving unknown linear preference scenarios
+of multi-objective reinforcement learning. However, there are several limitations of this algorithm restrict its
+applicability and performance in practice. Aiming at solving problems stated in Section 2, we design a new
+algorithm called envelope deep MORL algorithm. Following the value-based theoretical framework introduced
+in Section A.1, our key idea to upgrade the scalarized algorithm is to consider a different value space, where
+every Q-value function is a mapping to multi-objective solutions, not utilities, and therefore maintains the
+necessary information for prediction in the adaptation phase. Furthermore, we generalize the optimality filter H
+to use that information to boost up the alignment in the learning phase.
+We consider a new value space Q ⊆ (Ω → Rm )S×A , containing all bounded functions Q(s, a, ω) returning
+the estimates of preferred expected total rewards under preference ω, which are m-dimensional vectors. Besides,
+we employ a value metric d defined by
+d(Q, Q0 ) := sup |ω | (Q(s, a, ω) − Q0 (s, a, ω))|.
+(17)
+s∈S,a∈A
+ω∈Ω
+
+Notice that this metric is a pseudo-metric, since the identity of indiscernibles does not hold for it. It is easy to
+show that metric space (Q, d) is complete.
+We refer the Q-value functions in this Q multi-objective value functions. Similar to the scalarized one, we
+design an evaluation operator and an optimality operator for this envelope version algorithm. As for the updating
+scheme, we use hindsight experience replay and a homotopy optimization trick.
+
+A.2.1
+
+Multi-Objective Bellman Optimality Operator
+
+In this section, we give the evaluation operator and the optimality operator in the new envelope version value
+space (Q, d) as stated above. The evaluation operator now is even simpler than that of the scalarized version.
+Give a policy π, the evaluation operator is defined by
+(Tπ Q)(s, a, ω) := r(s, a) + γEτ ∼(P,π) Q(s0 , a0 , ω).
+(18)
+Since now the multi-objective Q-value function is also in a vector form, this evaluation operator is almost the
+same as that of the single-objective reinforcement learning. It can be easily verified as a contraction.
+As for the envelope version of optimality operator, we employ a stronger optimality filter H, defined by
+(HQ)(s, ω) := argQ supa0 ∈A,ω0 ∈Ω ω | Q(s, a0 , ω 0 ), where the argQ takes the multi-objective value corresponding to the supremum, i.e., Q(s, a00 , ω 00 ) such that (a00 , ω 00 ) ∈ arg supa0 ∈A,ω0 ∈Ω ω | Q(s, a0 , ω 0 ). The
+return of argQ depends on scalarization weights ω, and we use argQ for simplicity of notation. This filter
+is solving the convex envelope of the current Pareto frontier, therefore we name this algorithm as “envelope"
+version. We can write the optimality operator T in terms of the optimal filter:
+(T Q)(s, a, ω) := r(s, a) + γEs0 ∼P(·|s,a) (HQ)(s0 , ω).
+(19)
+Theorem 1 (Fixed Point of Evelope Optimality Operator for MORL). Use above definitions in the envelope
+version value space. Let Q∗ ∈ Q be the preferred optimal value function in the value space, such that
+"∞
+#
+X t
+∗
+|
+Q (s, a, ω) = argQ sup ω Eτ ∼(P,π)|s0 =s,a0 =a
+γ r(st , at ) ,
+(20)
+π∈Π
+
+t=0
+
+where the argQ takes the multi-objective value corresponding to the supremum, then Q∗ = T Q∗ holds.
+Proof. First, we observe that d(Q∗ , T Q∗ ) = sups∈S,a∈A |ω | (Q∗ (s, a, ω) − T Q∗ (s, a, ω))| = 0 ⇔
+ω∈Ω
+
+ω | T Q∗ (s, a, ω) = ω | Q∗ (s, a, ω) for all s, a, ω. Then, by substituting the definition of Q∗ into T Q∗ ,
+∗
+
+|
+
+ω T Q (s, a, ω)
+
+(linearity of exp. & cancel ω
+
+|
+
+=
+
+|
+
+|
+
+|
+
+|
+
+∗
+
+0
+
+ω r(s, a) + γ · ω Es0 ∼P(·|s,a) (HQ )(s , ω)
+
+∗
+
+|
+
+0
+
+0
+
+(def. of H)
+
+=
+
+ω r(s, a) + γ · ω Es0 ∼P(·|s,a) argQ
+
+and argQ )
+
+=
+
+ω r(s, a) + γ · Es0 ∼P(·|s,a)
+
+=
+
+
+
+|
+|
+0|
+ω r(s, a) + γ · Es0 ∼P(·|s,a)
+sup
+ω
+argQ sup ω E
+
+π∈Π
+a0 ∈A,ω 0 ∈Ω
+
+=
+
+
+
+|
+|
+|
+ω r(s, a) + γ · Es0 ∼P(·|s,a) sup ω
+argQ sup ω E
+
+0
+π∈Π
+a ∈A
+
+∗
+
+(insert eq. (20), def. of Q )
+
+(use def. of argQ , explained below)
+
+(rearrange expectation and sup)
+
+=
+
+|
+
+∗
+
+=
+
+|
+
+sup
+
+a0 ∈A,ω 0 ∈Ω
+
+∗
+
+0
+
+ω Q (s , a , ω )
+0
+
+0
+
+0
+
+ω Q (s , a , ω )
+
+τ ∼(P,π)
+|s0 =s0 ,a0 =a0
+
+|
+
+ω r(s, a) + γ · ω
+
+|
+
+|
+
+argQ sup ω E τ ∼(P,π)
+π∈Π
+
+(merge 1st term to sum & use def. of Q again)
+
+sup
+
+a0 ∈A,ω 0 ∈Ω
+
+ω
+
+|
+
+
+
+
+|
+
+argQ sup ω E τ ∼(P,π)
+
+π∈Π
+
+|s0 =s,a0 =a
+
+15
+
+s0 ∼P(·|s,a)
+
+"∞
+X
+t=0
+
+t
+
+"∞
+X
+
+τ ∼(P,π)
+|s0 =s0 ,a0 =a0
+
+"∞
+X
+
+#
+t
+
+γ r(st , at )
+
+t=0
+
+#
+
+
+γ r(st , at )
+
+
+
+|
+
+∗
+
+= ω Q (s, a, ω)
+
+t=0
+
+"∞
+X
+t=0
+t
+
+#
+
+γ r(st , at )
+
+t
+
+#
+
+
+γ r(st , at )
+
+
+
+The fourth equation is due to a sandwich inequality, ω| argQ sup ω| Qπ
+π∈Π
+
+|
+
+|
+
+π
+
+ω argQ sup ω∗ Q
+π∈Π
+
+=
+
+0
+| π 0
+ω Q ω∗
+
+|
+
+|
+
+0
+
+π
+
+0
+
+≤ ω argQ sup ω Q , where ω∗ and πω 0
+
+∗
+
+π∈Π
+
+0|
+
+|
+
+≤
+
+π
+
+sup ω argQ sup ω Q
+
+ω 0 ∈Ω
+
+=
+
+π∈Π
+
+are preference and policy corre-
+
+sponding to the supremums. According to the observation stated at the beginning, d(Q∗ , T Q∗ ) = 0. The
+preferred optimal value function is a fixed point of the proposed envelope version optimality operator.
+Theorem 1 tells us the preferred optimal value function is one of the fixed-points of envelope optimality operator
+T in the value space. And we still need to show that this T is a contraction.
+Theorem 2 (Envelope Optimal Operator is a Contraction). Let Q, Q0 be any two multi-objective Q-value
+functions in the envelope value space Q as defined above, the Lipschitz condition d(T Q, T Q0 ) ≤ γd(Q, Q0 )
+holds, where γ ∈ [0, 1) is the discount factor of the underlying MOMDP M (see Section 2).
+we assume supa∈A,ω0 ∈Ω ω | Q(s, a, ω 0 )
+≥
+Proof. Without the loss of generality,
+| 0
+0
+supa∈A,ω0 ∈Ω ω Q (s, a, ω ) for some state s and ω of interest. Expand the expression of d(T Q, T Q0 ) we
+have
+d(T Q, T Q0 )(s, a)
+
+=
+
+ω | ((T Q)(s, a) − (T Q0 )(s, a))
+
+sup
+s∈S,a∈A
+ω∈Ω
+
+=
+
+sup
+s∈S,a∈A
+ω∈Ω
+
+≤
+
+γ·
+
+γ · ω | Es0 ∼P (·|s,a) (HQ)(s0 , ω) − γ · ω | Es0 ∼P (·|s,a) (HQ0 )(s0 , ω)
+
+sup
+
+ω
+
+|
+
+"
+argQ
+
+s0 ∈S,ω∈Ω
+
+≤
+
+γ·
+
+sup
+
+|
+
+sup
+a0 ∈A,ω 0 ∈Ω
+
+0
+
+0
+
+ω Q(s , a , ω ) − argQ
+
+ω | Q(s0 , a0 , ω 0 ) −
+
+sup
+
+0
+
+s0 ∈S,ω∈Ω a0 ∈A,ω 0 ∈Ω
+
+sup
+
+|
+
+#
+0
+
+0
+
+00
+
+00
+
+ω Q (s , a , ω )
+
+a00 ∈A,ω 00 ∈Ω
+
+ω | Q0 (s0 , a00 , ω 00 )
+
+sup
+a00 ∈A,ω 00 ∈Ω
+
+Step 2 to 3 is because |E[·]| ≤ E[| · |] ≤ sup | · |, and step 3 to 4 results from the cancellation between ω | and
+argQ (as justified above). According to our assumption, let a0 and ω 0 be the action and preference chosen to
+maximize the value of ω | Q for some state s0 and preference ω of interest, then we derive
+d(T Q, T Q0 )(s, a)
+
+≤
+
+γ·
+
+ω | Q(s0 , a0 , ω 0 ) −
+
+sup
+s0 ∈S,ω∈Ω
+
+=
+
+γ·
+
+sup
+
+sup
+
+ω | Q0 (s0 , a00 , ω 00 )
+
+a00 ∈A,ω 00 ∈Ω
+
+|ω | Q(s0 , a0 , ω 0 ) − ω | Q0 (s0 , a0 , ω 0 )
+
+s0 ∈S,ω∈Ω
+
++ω | Q0 (s0 , a0 , ω 0 ) −
+
+sup
+
+ω | Q0 (s0 , a00 , ω 00 )|
+
+a00 ∈A,ω 00 ∈Ω
+
+≤
+
+γ·
+
+sup
+s0 ∈S,ω∈Ω
+
+≤
+
+γ·
+
+sup
+
+ω | Q(s0 , a0 , ω 0 ) − ω | Q0 (s0 , a0 , ω 0 )
+ω | Q(s0 , a0 , ω 0 ) − ω | Q0 (s0 , a0 , ω 0 ) = γd(Q, Q0 )
+
+s0 ∈S,a0 ∈A
+ω∈Ω
+
+The step 2 to 3 arises from the w.l.o.g. assumption that ω | Q(s0 , a0 , ω 0 )− sup ω | Q0 (s0 , a00 , ω 00 ) ≥ 0, as stated
+a00 ,ω 00
+
+in lines 612 and 615. Thus, the whole expression in |·| is nonnegative and ω | Q(s0 , a0 , ω 0 )−ω | Q0 (s0 , a0 , ω 0 ) ≥
+0 . We can discard the last two terms since ω | Q0 (s0 , a0 , ω 0 ) ≤
+sup
+ω | Q0 (s0 , a00 , ω 00 ). Step 3 to 4 is
+because sup f (s0 , a0 , ω 0 ) ≤
+s0 ,ω 0
+
+a00 ∈A,ω 00 ∈Ω
+
+sup f (s0 , a00 , ω 0 ) holds for any a0 and f (·).
+s0 ,a00 ,ω 0
+
+This completes our proof that T is a contraction.
+Remember that in our design, envelope version value distance d is a pseudo-metric. In a pseudo-metric space
+iteratively applying contraction may not shrink to the desired fixed point. To assert the convergence effectiveness
+of our design for optimality operator, we need to investigate a generalized Banach’s Fixed-Point Theorem in the
+pseudo-metric space.
+
+16
+
+A.2.2
+
+Generalized Banach’s Fixed-Point Theorem
+
+Theorem 3 (Generalized Banach Fixed-Point Theorem). Given that T is a contraction mapping with Lipschitz
+coefficient γ on the complete pseudo-metric space hQ, di, and Q∗ is defined as that in Theorem 1, it is always
+true that limn→∞ d(T n Q, Q∗ ) = 0 for any Q ∈ Q.
+Proof. By the symmetry and triangle inequality of pseudo-metric, for any Q, Q0 ∈ Q,
+d(Q, Q0 )
+
+≤
+≤
+≤
+
+⇒ d(Q, Q0 )
+
+d(Q, T Q) + d(T Q, T Q0 ) + d(T Q0 , Q0 )
+d(Q, T Q) + γd(Q, Q0 ) + d(T Q0 , Q0 )
+[d(T Q, Q) + d(T Q0 , Q0 )]/(1 − γ)
+
+Consider two points T ` Q, T m Q in the sequence {T n Q}. Their distance is bounded by
+d(T ` Q, T m Q)
+
+≤
+
+[d(T `+1 Q, T ` Q) + d(T m+1 Q, T m Q)]/(1 − γ)
+
+≤
+
+[γ ` d(T Q, Q) + γ m d(T Q, Q)]/(1 − γ)
+
+≤
+
+γ` + γm
+d(T Q, Q)
+(1 − γ)
+
+since γ ∈ [0, 1) the distance d(T ` Q, T m Q) converge to 0 as `, m → ∞, proving that {T n Q} is a Cauchy
+sequence. Because hQ, di is a complete pseudo-metric space, limn→∞ d(T n Q, Q ) = 0 for some Q ∈ Q.
+Therefore,
+d(T Q , Q ) = lim d(T n+1 Q, Q ) = lim d(T n Q, Q ) = 0
+n→∞
+
+n→∞
+
+We claim that Q and Q∗ must lie in the same equivalent class partitioned by relation d(·, ·) = 0. Suppose
+d(Q , Q∗ ) 6= 0, then we can get a contradiction
+d(Q , Q∗ )
+
+=
+≤
+<
+
+d(Q , T Q ) + d(T Q , T Q∗ ) + d(T Q∗ , Q∗ )
+0 + γd(Q , Q∗ ) + 0
+d(Q , Q∗ )
+
+This proves our claim. Therefore, limn→∞ d(T n Q, Q∗ ) = 0 for any Q ∈ Q.
+In other words, Theorem 3 guarantees that iteratively applying optimal operator T on any multi-objective Q-value
+function, the algorithm will terminate with a function Q which is equivalent to Q∗ under the measurement of
+pseudo-metric d. Actually, these Q ’s are as good as Q∗ , since they all have the same utilities for each ω, and
+only differ in the real value when the utility corresponds a recess in the utility control frontier.
+
+A.2.3
+
+Updating Scheme
+
+Hindsight Experience Replay (HER) Paper [11] presents a technique for training a reinforcement
+learning to serve multiple goals. For each episode, the agent performs following a policy according to a randomly
+sampled goals. When updating, the agent uses the past trajectory update for multiple other goals in parallel.
+They referred this method as hindsight experience replay (HER). Though our settings are completely different, a
+similar method can be employed to update utility-based multi-objective Q-network here.
+In the learning phase of the unknown linear preference scenario, for each training episode, the MORL agent
+randomly sample a preference ω from a certain distribution Dω . When updating the multi-objective Q-network
+accordingly, for each sampled transition record (sit , ait , rti , sit+1 ) from replay buffer Dτ , we associate it with
+Nω preferences {ω1 , ω2 , . . . , ωNω } sampled from Dω . The update is applied to an expended batch of size
+minibatch_size × Nω . Note that the preferences sampled for actions only influence the agent’s actions, not the
+environment dynamics. In this way, the trajectories can be replayed with arbitrary preferences with “hindsight".
+
+Homotopy Optimization We use deep neural networks to approximate bounded functions in Q ⊆ (Ω →
+Rm )S×A with parameters θ. We refer to this neural network as a multi-objective Q-network. To drag Q close to
+T Q at each update step, the multi-objective Q-network can be trained by minimizing a series of loss functions
+
+
+LAk (θ) = Es,a,ω kyk − Q(s, a, ω; θ)k22 ,
+(21)
+which changes at each iteration k, where yk = Es0 [r(s, a) + γ(HQ)(s0 , a0 , ω; θk )] is the target of iteration k.
+The target is fixed during optimizing this loss function.
+Minimizing the loss function LA is trying to drag the vector Q close to T Q. This ensures the correctness of
+our algorithm, to predict a Q as the real solution, while this means the square error is hard to be optimized in
+practice. To address this problem, we use a sequence of auxiliary loss function LB to directly optimized the
+value metric d, which is defined by
+LBk (θ) = Es,a,ω [|ω | yk − ω | Q(s, a, ω; θ)|]
+
+17
+
+(22)
+
+Our final loss function sequence Lk (θ) = (1 − λk ) · LAk (θ) + λk · LBk (θ), where λk is a weight to trade off
+between losses LAk and LBk . We increase the value of λk from 0 to 1, to shift our loss function from LA to LB .
+This method called homotopy optimization [12] is effective since for each update step, it uses the optimization
+result from the previous step as the initial guess. In the envelope deep MORL algorithm, LA first ensure the
+prediction of Q is close to any real expected total reward, though it is hard to be optimal. And then LB can
+provide an auxiliary force to pull the current guess along the direction with better utility. Figure 6 illustrate an
+explanation for this homotopy optimization.
+The parameters of the multi-objective Q-network will be updated by θk+1 ← θk − η, where
+
+|
+
+η ∝ ∇θ=θk Lk (θ) = −Es,a,s0 r + γ(HQ)(s0 , a0 , ω; θk ) − Q(s, a, ω; θk ) ∇θ=θk Q(s, a, ω; θ) . (23)
+
+Landscape of LA (✓)
+
+Homotopy Path
+
+<latexit sha1_base64="/tR3AroWa+4y7IQ543bgQCB32KY=">AAACWnicfZFdSxtBFIYnW9vq2o/Y6pU3Q4NgSwy7paCXVnvhhVILjQpuGs5OTpLB+VhmzophyY/xtv1Fhf6Yzq6B1go9MPDMmffMOfNOXijpKUl+tqJHS4+fPF1eiVefPX/xsr326szb0gnsC6usu8jBo5IG+yRJ4UXhEHSu8Dy/OqzPz6/ReWnNV5oVONAwMXIsBVBIDdsbx9+qTANNifjH+XZGUyR4O2x3kl7SBH8I6QI6bBGnw7XWTjayotRoSCjw/jJNChpU4EgKhfM4Kz0WIK5ggpcBDWj0g6qZf863QmbEx9aFZYg32b8rKtC+nrHLA9QS35Cf6bzLc91sbGHCRbXqfi8a7w0qaYqS0Ii7VuNScbK8toOPpENBasbj7BOGyR2ehCs+F+iArHtXZeAmGm7m4SUTnnV5zf+TSvNHGjjeCh1AOBls4GIKDgSF34iDwem/dj6Es/e9NOmlXz509g8WVi+zTfaGbbOU7bJ9dsROWZ8JVrFb9p39aP2KomglWr2TRq1FzWt2L6L131a0sqk=</latexit>
+
+Many local Minima,
+Hard for optimization.
+(λ = 0.0 )
+
+λ increases
+from 0.0 to 1.0
+
+Landscape of
+
+Landscape of LB (✓)
+<latexit sha1_base64="16nvMhnm4VT+N0DwLM43F7Ptr5k=">AAACWnicfZFdSxtBFIYnW9vq2o9Y65U3Q4NgSwy7pWAvRXvRi4oWGhXcNJydnCSD87HMnJWGJT/GW/1FQn9MZ9eAtUIPDDxz5j1zzryTF0p6SpLbVvRk6emz58sr8eqLl69et9fenHhbOoF9YZV1Zzl4VNJgnyQpPCscgs4VnuYXB/X56SU6L635QbMCBxomRo6lAAqpYXvj288q00BTIr4/385oigTvh+1O0kua4I8hXUCHLeJ4uNbayUZWlBoNCQXen6dJQYMKHEmhcB5npccCxAVM8DygAY1+UDXzz/lWyIz42LqwDPEm+3dFBdrXM3Z5gFriG/IznXd5rpuNLUy4qFY97EXjz4NKmqIkNOKu1bhUnCyv7eAj6VCQmvE4+4JhcoeH4YqjAh2QdR+qDNxEw695eMmEZ11e8/+k0txLA8dboQMIJ4MNXEzBgaDwG3EwOP3Xzsdw8rGXJr30+6fO3v7C6mW2yd6xbZayXbbHvrJj1meCVeyKXbOb1u8oilai1Ttp1FrUrLMHEb39A1idsqo=</latexit>
+
+(1
+<latexit sha1_base64="TjnX4unUmetspdfCwvDrOP4dV5A=">AAACj3icfZFdb9MwFIbd8DXCVwuX3FhUkzroqgQhbVdTGVwAAjEkuk1aSnXinLbWHDuyTxBV1P/Er0HiCn4KThYBoxJHsvT6+LHPOa/TQklHUfS9E1y5eu36ja2b4a3bd+7e6/buHztTWoETYZSxpyk4VFLjhCQpPC0sQp4qPEnPX9TnJ5/ROmn0R1oVOM1hoeVcCiCfmnXfDOLdRHk+g51EZIb4209VkgMtifjz9SChJRLs8CcttMEc/mZm3X40iprgmyJuRZ+1cTTrdXaTzIgyR01CgXNncVTQtAJLUihch0npsABxDgs881JDjm5aNUOv+bbPZHxurF+aeJP9+0YFuat7HHIvasQ1yq3ydMjTvNmYQvuHaupyLZrvTyupi5JQi4tS81JxMrz2kGfSoiC14mHyEn3nFt/5J94XaIGMfVwlYBc5fFn7SRY8GfJa/w+V+g/qdbjtK4Cw0tvAxRIsCPJfGHqD43/t3BTHT0dxNIo/POuPD1urt9hD9ogNWMz22Ji9YkdswgT7yr6xH+xn0Av2goNgfIEGnfbOA3Ypgte/APjoxjE=</latexit>
+
+) · LA (✓) +
+
+· LB (✓)
+
+Few local Minima,
+Too flat to be optimized.
+(λ = 1.0 )
+
+Trade-oﬀ between
+the loss A and the loss B
+
+✓⇤
+
+Local
+Minimum
+
+<latexit sha1_base64="ncGiTuzElxMNM9sErPXKhIe9wus=">AAACS3icfZDLShxBFIarJ/GSjhpNlm6KDEKQcegOgbiUJItsggqODtijnK45M1NYl6bqtDg08xJuzSvlAfIc2YmLVLcDaoQcKPjq1H8u9eeFkp6S5HfUevFyYXFp+VX8emV17c36xttjb0snsCessq6fg0clDfZIksJ+4RB0rvAkv/hav59covPSmiOaFjjQMDZyJAVQSPUzmiDB2fb5ejvpJk3w55DOoc3mcXC+Ee1kQytKjYaEAu9P06SgQQWOpFA4i7PSYwHiAsZ4GtCARj+omoVnfCtkhnxkXTiGeJN9XFGB9hpo0uEBaolvyE913uG5bi62MKFRrXo6i0a7g0qaoiQ04n7UqFScLK//z4fSoSA15XH2DcPmDn+EFvsFOiDrtqsM3FjD1Sz8ZMyzDq/5f1JpHqSB460wAYSTwQYuJuBAULA/Dgan/9r5HI4/dtOkmx5+au99mVu9zDbZe/aBpewz22Pf2QHrMcEUu2Y37Gf0K/oT3UZ399JWNK95x55Ea+EvNM6wOQ==</latexit>
+
+Figure 6: An explanation for homotopy optimization method used in the envelope deep MORL algorithm.
+The MSE loss LA is hard for optimization since there are many local minima over its landscape. Although the
+value metric loss LB has fewer local minima, it is also hard for optimization since there are many vectors Q
+minimizing value metric d. The landscape of LB is too flat. The homotopy path connecting LA and LB provides
+better opportunities to find the global optimal parameters θ∗
+When updating, we sample a minibatch of transition records from this replay buffer with HER. Theorems 1-3
+and 5 guarantees the convergence of this minibatch updating, with an extra assumption that we can update
+the Q-function according to equation 23 for each ω ∈ Ω infinite times. We use hindsight experience replay
+(HER) to ensure this. Notice that we will apply our optimality filter on the HER expended batch. Therefore the
+cost of solving the convex envelope is acceptable. Our multi-objective Q-network can also be replaced with
+other models similar to those in single-objective off-policy RL algorithms. In the experiment, we also use some
+popular deep reinforcement learning techniques to stabilize and speed up our algorithms. The skeleton of our
+envelope deep MORL is shown as Algorithm 1.
+
+B
+
+Experimental Details
+
+We first demonstrate our experimental results on two synthetic domains, Deep Sea Treasure (DST) and Fruit
+Tree Navigation (FTN), as well as two complex real domains, Task-Oriented Dialog Policy Learning (Dialog)
+and SuperMario Game (SuperMario). We also elaborate specific model architecture and and implementation
+details in this section.
+
+B.1
+
+Domain Details
+
+Deep Sea Treasure (DST) Our first experiment domain is a grid-world navigation problem, Deep Sea
+Treasure. This episodic problem was first explicitly created to highlight the limitations of linear scalarization [14]
+. However, in this paper, we use this environment as a delayed linear preference scenario. We ensure the Pareto
+frontier of this environment is convex, therefore the Pareto frontier itself is the its CCS.
+In DST, an agent controls a submarine searching for treasures in a 10 × 11-grid world while trading off
+time-cost and treasure-value. The grid world contains 10 treasures of different values. Their values
+increase as their distances from the starting point s0 = (0, 0) increase. An agent’s action spaces are formed
+by navigation in four directions. The reward has two dimensions: the first dimension indicates a time penalty,
+which is −1 on all turns; and the second dimension is the treasure value which is 0 except when the agent moves
+into a treasure location. We ensure the Pareto frontier of this environment to be convex. We depicted the map in
+Figure 7.
+
+18
+
+2.9
+
+3.7 3.8
+
+2.9
+
+3.9
+
+3.6 3.5
+
+3.2
+
+4.
+
+3.8
+
+2.4 2.8 2.7
+
+1.8
+
+3.8
+
+3.3 3.5
+2.
+
+2.7 2.6
+
+3.6
+
+2.8
+
+3.8
+
+3.7 3.7
+3.5
+3.3
+3.3 3.4 3.6 3.1 3.1
+3.3 3.2 3.2
+3.2 2.8 3.5 2.9 3.3 2.9 3.5 3.6 3.6
+2.8
+2.8
+2.7
+2.7
+2.6
+2.6 2.6
+
+Best Utility: maxr̂0 2CCS ! | r̂ 0
+Optimal Policy
+for Preference ω
+
+! | CCS={
+
+2.9
+
+3.7 3.8
+
+2.9
+
+3.9
+
+3.6 3.5
+
+3.2
+1.8
+
+4.
+
+3.8
+
+2.4 2.8 2.7
+
+3.8
+
+3.3 3.5
+2.
+
+2.7 2.6
+
+}
+
+3.6
+
+2.8
+
+3.8
+
+3.1 3.3
+
+3.9
+
+3.1
+
+3.
+1.9
+
+2.4
+
+3.3
+
+3.
+
+3.1 3.4
+
+Actions = {L, R}
+
+States = {(row, col)}
+
+<latexit sha1_base64="lzpbyKofPpslW1WwdqFdHEuuojY=">AAACjHicfZBtaxNBEMc351M9tab60jeLoSgSw50ICiIUI+obsaJpC90Y5jaTZOk+HLtzYjjuI/lpfCXod3HvGrC14MDCb2f+s7PzL0qtAmXZz15y6fKVq9e2rqc3bt7avt3fuXMQXOUlTqTTzh8VEFArixNSpPGo9Aim0HhYnIzb+uFX9EE5+5nWJU4NLK1aKAkUU7P+W2Hg26wWK6BaFIb75gEXyvKYphVRPR5/ahreVoQzuIQvdawSegm6Ods06w+yUdYFvwj5BgZsE/uznd5jMXeyMmhJagjhOM9KmtbgSUmNTSqqgCXIE1jicUQLBsO07jZu+G7MzPnC+Xgs8S57tqMGE9oNhjxCKwkdhbUphrww3cWVNj7Uqs7PosXzaa1sWRFaeTpqUWlOjrcG8rnyKEmveSpeY/y5x/fxiQ8leiDnH9UC/DJ62sRNllwMecv/kyr7Vxo53Y0TQHoVbeByBR5ktDuk0eD8XzsvwsGTUZ6N8o/5YO/Vxuotdo/dZw9Zzp6xPfaO7bMJk+w7+8F+sd/JdvI0eZG8PJUmvU3PXXYukjd/AO5QxtA=</latexit>
+sha1_base64="UKajn45hrCTJA18bGFZk5iiEP8I=">AAACjHicfZDdahNBFMdP1q+6ak3rpQiDoSgSw64ILRQhGFFvxIqmLXRimJ2cbIbOxzIzWxqWfRdvvPRpvBL0JXwCZzcFWwseGPjNOf8zZ84/K6RwPkl+dKIrV69dv7F2M751+8763e7G5r4zpeU45kYae5gxh1JoHHvhJR4WFpnKJB5kx6OmfnCC1gmjP/llgRPFci3mgjMfUtPuG6rY6bSiC+Yrmili60eECk1C2i+8r0ajj3VNmgo1CnP2uQpVj5YzWZ9vmnZ7ySBpg1yG9Ax6wwe/v34BgL3pRucpnRleKtSeS+bcUZoUflIx6wWXWMe0dFgwfsxyPAqomUI3qdqNa7IVMjMyNzYc7UmbPd9RMeWaDfokQCNxLbmlyvokU+3FFDo81KguzvLznUkldFF61Hw1al5K4g1pDCQzYZF7uSQxfYXh5xbfhSfeF2iZN/ZJRZnNg6d12CQntE8a/p9U6L/SwPFWmMC4FcEGwhfMMh7sdnEwOP3Xzsuw/2yQJoP0Q9obvoRVrMF9eAiPIYVtGMJb2IMxcPgG3+En/IrWo+fRbvRiJY06Zz334EJEr/8AVovJZA==</latexit>
+sha1_base64="VqXNBjXY4/hWYSj5fMRqTxe6Tyg=">AAACjHicfZDdahNBFMcnWz/qqjWtlyIMhqJIDLtSUJBCMKLeiBVNW+jEMDs52Qydj2XmbDEs+zZ66dN4IYK+hE/g7KZga8EDA78553/mzPlnhZIek+RHJ1q7dPnK1fVr8fUbNzdudTe39r0tnYCxsMq6w4x7UNLAGCUqOCwccJ0pOMiOR0394AScl9Z8wGUBE81zI+dScAypafcV0/zTtGILjhXLNHX1fcqkoSGNC8RqNHpf17SpMKsh5x+rUEVwgqv6bNO020sGSRv0IqSn0Bve/f3ls/y+szfd7DxiMytKDQaF4t4fpUmBk4o7lEJBHbPSQ8HFMc/hKKDhGvykajeu6XbIzOjcunAM0jZ7tqPi2jcb9GmARuJb8kud9Wmm24stTHioUZ2fhfOnk0qaokQwYjVqXiqKljYG0pl0IFAtacxeQPi5gzfhibcFOI7WPawYd3nwtA6b5JT1acP/k0rzVxo43g4TuHAy2EDFgjsugt0+Dgan/9p5EfYfD9JkkL5Le8PnZBXr5A65Rx6QlDwhQ/Ka7JExEeQr+UZ+kl/RRrQTPYt2V9Koc9pzm5yL6OUf1FbK3A==</latexit>
+
+3.8
+2.1
+
+0
+
+1
+4.92392 Protein
+B4.74425C3.8Carbs 3.9
+3.3 3. 3.1 3.4
+B
+C 3.1 3.3 3.1 3.
+2.4
+2.1
+B
+C
+1.9
+B2.56042C Fats
+B
+C
+B4.76936C Vitamins
+@1.43523A Minerals
+4.67811 Water
+
+3.7 3.7
+3.5
+3.3
+3.3 3.4 3.6 3.1 3.1
+3.3 3.2 3.2
+3.2 2.8 3.5 2.9 3.3 2.9 3.5 3.6 3.6
+2.8
+2.8
+2.7
+2.7
+2.6
+2.6 2.6
+
+Nutritions ∈ R6, e.g. r=
+(rewards)
+
+Figure 8: Fruit Tree Navigation (FTN): An agent travels from the root node to one of the leaf node to pick a
+fruit according to a post-assigned preference ω on the components of nutrition, treated as different objectives.
+The observation of an agent is its current coordinates (row, col), and its valid actions are moving to the left or
+the right subtree.
+a.
+
+b.
+
+Fruit Tree Navigation (FTN) Our second ex-
+
+Figure 8 shows an instance of the fruit tree navigation task
+when d = 6, in which every non-leaf node is associated
+with zero reward and every fruit is a potential optimal
+solution in the convex cover set of the Pareto frontier. To
+(i)
+(i)
+construct this, we sample r (i) = (v+ + v− )/kv (i) k2 ,
+where v (i) ∼ N6 (0, I), for each fruit i on a leaf node.
+The optimal multiple-policy model for this tree structured
+MOMDP should contain all the paths from the root to
+different desired fruits. In experiments, we also test on
+d = 5 and d = 7 cases.
+
+0.7
+8.2
+
+time penalty
+
+periment domain is a full binary tree of depth d with
+randomly assigned vectorial reward r ∈ R6 on the
+leaf nodes. These rewards encode the amounts of six
+different components of nutrition of the fruits on the tree:
+{Protein, Carbs, Fats, Vitamins, Minerals, Water}.
+For every leaf node, ∃ω for which its reward is optimal,
+thus all leaves lie on the CCS. The goal of our MORL agent
+is to find a path from the root to a leaf node that maximizes
+utility for a given preference, choosing between left or
+right subtrees at every non-terminal node.
+
+11.5
+14.0 15.1 16.1
+
+19.6 20.3
+
+22.4
+23.7
+
+deep sea map
+
+Figure 7: Deep Sea Treasure (DST): An agent
+controls a submarine searching for treasures in
+a 10 × 11-grid world. The state st consists of
+the agent’s current coordinates (x, y). An agent’s
+action spaces is navigation in four directions. The
+reward received by the agent is a 2-dimensional
+vector (time penalty, treasure value).
+
+In this multi-objective environment, an optimal policy can be easily learned if we know the preference function
+fω (·) = hω, ·i for scalarization. However, since here we are interested in evaluating whether a multiple-policy
+neural network, trained with deep MORL algorithms, can find and maintain all the potential optimal policies
+(i.e., paths to every leaf node) when the preference function is unknown, and adapt to the optimal policy when a
+specific preference is given or hidden during execution.
+
+Task-Oriented Dialog Policy Learning (Dialog) Our third experimental domain is a modified taskoriented dialog system in the restaurant reservation domain based on PyDial [36], where an agenda-base user
+simulator [43] with an error model to simulate the recognition and understanding errors arisen in the real system
+due to in the speech noise and ambiguity. A. We consider the task success rate and the dialog brevity (measured
+by number of turns) as two competing objectives of this domain.
+Finding a good trade-off between multiple potentially competing objectives is usually domain-specific and
+not straightforward. For example, in the case when the objectives are brevity and success, if the relative
+importance weight for success is too high, the resulting policy is insensitive to potentially annoying actions such
+as repeat() provided that the dialogue is eventually successful. In this case, the obtained optimal policy cannot
+fit all users’ preference, and sometimes is out of our expectation. Adaptation to user preferences and balancing
+these objectives is rarely considered.
+In the standard single-objective reinforcement learning formulation, the goal of the policy model is to interact
+with a human user by choosing actions in each turn to maximize future rewards. We define the dialogue state
+shared by dialogue state tracker in the t-th turn as state st . The action taken by policy model under current
+
+19
+
+tre
+
+policy πθ with parameters θ in the t-th turn as at , and at ∼ π(·|st ). The stochastic transition kernel is unknown
+but determined by human users or user simulators. In an ideal dialogue environment, once the policy model
+emits an action at , the human user will give an explicit feedback, like a normal response or a feedback of
+whether the dialogue is successful, which will be converted to a reward signal rt delivering to the policy model
+immediately, and then the policy model will transit to next state st . The reward signal is an average of values of
+two objectives, brevity and success, e.g., rt = 0.5rtturn + 0.5rtsucc . Typically, rtturn is fixed for each turn as a
+negative constant Rturn , while rtsucc equals a positive constant Rsucc only when the dialogue terminates and
+receives a successful user feedback otherwise it equals zero.
+To address this problem,
+we transform
+
+| the dialogue learning process into a MORL scenario with vectorized
+(2-D) rewards: rt = rtturn rtsucc , where rtturn is a turn penalty for the brevity objective and rtsucc is a reward
+provided on successful completion of the task. In the learning phase, the linear preference ω over these two
+objectives are unknown, while the computational resources are abundant. The task-oriented dialogue system
+needs to learn all the possible optimal policies with sampled ω’s (achieved by user simulators or collected
+interactions with real users). While in the adaptation phase, learning is unaffordable because of the limitation of
+resources. The task-oriented dialogue system needs to respond the user with a specified user preference. User’s
+utility increase is aligned with the system’s utility increase ω | rt . Paper [44] proposes a structured method,
+which is equivalent to the scalarized baseline without hindsight experience replay, for finding the optimal weights
+for a multi-objective reward function.
+As for more experimental details, our dialog domain is a restaurant reservation hotline which provides information
+about restaurants in Cambridge. There are 3 search constraints, 9 informational items that the user can request,
+and 110 database entities. The reward Rturn is −1 for each turn, and Rsucc = 20. The maximal length
+of dialogue is 25. We apply our envelope deep MORL algorithm to this dialogue policy learning task, and
+compare to traditional single-objective methods and other baselines. All the single-objective and multi-objective
+reinforcement learning are trained for 3,000 sessions with 15% simulated speech recognition and understanding
+error rate.
+
+Multi-Objective SuperMario Game (SuperMario) Our final environment is a version of the popular
+video game Super Mario Bros. We modify the open-source environment from OpenAI gym [37] to provide
+vectorized rewards encoding five different objectives: x-pos: value corresponding to the difference in Mario’s
+horizontal position between current and last time point, time: a small negative time penalty, deaths: a large
+negative penalty given each time Mario dies3 , coin: rewards for collecting coins, and enemy: rewards for
+eliminating an enemy. The state is a stack of four continuous frames of game images rendered by the simulator,
+and there are seven valid actions each step: {‘NOOP’,‘right’,‘right+A’,‘right+B’,‘right+A+B’, ‘A’, ‘left’}, where
+the button ‘A’ is used to jump and the button ‘B’ is used to run. We restrict the Mario to only play the stage I.
+We use an A3C [38] variant of our envelope MORL algorithm. During the learning phase, the agent does
+not know the underlying preference, and hence needs to learn a multi-objective policy within 32k training
+episodes. During the adaptation phase, we test our agents under 500 uniformly random preferences and test
+the its preference elicitation ability (as described in Section 3) within 100 episodes to uncover the underlying
+preference that maximizes utility.
+
+B.2
+
+Implementation Details
+
+Our multi-objective Q-network can be replaced with any model similar to that in single-objective off-policy RL
+algorithms like DDPG [45], NAF [46] or SDQN [47]. In the experiment, we use a variate of deep reinforcement
+learning techniques including double Q-learning [48] with a target network and prioritized experience replay [49],
+which stabilize and speed up our algorithms.
+
+Architectures of the Multi-objective Q-Network We implement the Multi-objective Q-networks
+(MQNs) by 4 fully connected hidden layers with {16, 32, 64, 32} × (dim(S) + m) hidden unites respectively. The multi-objective Q-networks are similar to Deep Q-Networks (DQNs) [34], but differs on inputs.
+An input of the multi-objective Q-network is a concatenation of state representation and parameters of a linear
+preference function. The output layer of the scalarized MORL algorithm is of size |A|, and that of envelope
+version is of size m × |A|. Here dim(S) is the dimensionality of the state space, |A| is the cardinality of the
+action set, and m is the number of objectives.
+Multi-Objective A3C We use the multi-objective A3C (MoA3C) algorithms for Mario experiment. The
+skeleton of the envelope MoA3C algorithm is provided in Algorithm 2. Im MoA3C Both critic and actor
+networks contain three shared convolutional layers for feature extraction from raw images input. The extracted
+features are then concatenated with preferences, and fed into two-layer fully connected networks for output.
+For the scalarized version MoA3C, the output of the critic network is just one-dimensional utility prediction,
+whereas the output of the envelope version critic network is m-dimensional returns prediction. Both scalarized
+3
+
+Mario has up to three lives in one episode.
+
+20
+
+QUANTITY OF OBJECTIVE 2
+
+CCS
+
+A
+
+M
+
+B
+
+Retrieved Solutions
+
+C
+
+D
+K
+
+Non-optimal Solutions
+E
+
+L
+F
+
+Precision =
+
++
+
+Recall =
+
++
+
+G
+H
+
+QUANTITY OF OBJECTIVE 2
+
+b.
+
+a.
+
+QUANTITY OF OBJECTIVE 1
+
+!1
+
+Optimal Control
+Frontier
+
+<latexit sha1_base64="9Bu7KHoXXragPIuL8XXDhUOAfck=">AAACT3icfZFNSxxBEIZ71sSPMRo1Ry9NFkFkXWaCoEfRHHIJGnBVcJalprd2bLa/6O4JWYb9G17NX/LoL8ktpGcykKhgQcPT1W9XVb+dG8GdT5LHqLPw5u3i0vJKvPpubf39xubWpdOlZThgWmh7nYNDwRUOPPcCr41FkLnAq3x6Wp9ffUfruFYXfmZwKKFQfMIZ+JDKslzSTEssYJSONrpJP2mCvoS0hS5p43y0Ge1nY81KicozAc7dpInxwwqs50zgPM5KhwbYFAq8CahAohtWzdBzuhMyYzrRNizlaZP9/0YF0knwtz0aoJa4htxM5j2ay2ajjQqFatXTXn5yNKy4MqVHxf62mpSCek1rD+iYW2RezGicfcYwucWvocSZQQte270qA1tI+DEPLylo1qM1vybl6p80cLwTOgCzPNhA2S1YYD58QRwMTp/b+RIuP/XTpJ9+O+gen7RWL5Nt8pHskpQckmPyhZyTAWHEkDtyT35GD9Gv6HenlXaiFj6QJ9FZ+QMZE7Co</latexit>
+
+N
+
+D
+
+L
+
+Retrieved Control
+Frontier
+F
+
+!2
+<latexit sha1_base64="+UouUJfOmsYL+mxiFW/Pw7MTXn0=">AAACT3icfZFNSxxBEIZ7NsaPMfHzmEvjIoSwWWYkEI+iHryEGHBVcJalprd2bLa/6O4Rl2H/htf4lzz6S3IL6ZkMJCpY0PB09dtV1W/nRnDnk+Qx6rxZeLu4tLwSr757v7a+sbl17nRpGQ6YFtpe5uBQcIUDz73AS2MRZC7wIp8e1ecXN2gd1+rMzwwOJRSKTzgDH1JZlkuaaYkFjPZGG92knzRBX0LaQpe0cTrajD5nY81KicozAc5dpYnxwwqs50zgPM5KhwbYFAq8CqhAohtWzdBzuhsyYzrRNizlaZP9/0YF0knw1z0aoJa4htxM5j2ay2ajjQqFatXTXn6yP6y4MqVHxf62mpSCek1rD+iYW2RezGicHWOY3OK3UOK7QQte209VBraQcDsPLylo1qM1vybl6p80cLwbOgCzPNhA2TVYYD58QRwMTp/b+RLO9/pp0k9/fOkeHLZWL5MPZId8JCn5Sg7ICTklA8KIIXfkJ7mPHqJf0e9OK+1ELWyTJ9FZ+QMa87Cp</latexit>
+
+Control Errors
+QUANTITY OF OBJECTIVE 1
+
+Figure 9: Quantitative evaluation metrics for multi-objective reinforcement learning. (a.) Coverage ratio
+measures an agent’s ability to find all the potential optimal solutions in the convex coverage set of Pareto frontier.
+(b.) Adaptation quality measures an agent’s ability of policy adaptation to real-time specified preferences.
+and envelope versions have the same actor network architecture to output the probability distribution over the
+action space. We train them with 16 workers in parallel with different sampled preferences, and it take around
+10 hours for the envelope version MoA3C to converge to a good level of performance.
+
+Training with Prioritized Double Q-Learning When training the with our MORL algorithm on DST
+and FTN tasks, we employ techniques of prioritized experience reply [49] and double Q-learning [48] to speed
+up the training process and to yield more accurate value estimates. Double Q-Learning introduces a target
+network Qtarget to replace the estimate of T Q(s, a, ω), yt (ω) = ω | r + γQtarget (s0 , a, ω) with ytdouble (ω) =
+ω | r + γQtarget (s0 , arg maxa Q(s0 , a, ω), ω) for scalarized version of algorithm, and similarly we replace
+yt (ω) = ω | r + γω | Qtarget (s0 , a, ω) with ytdouble (ω) = ω | r + γω | Qtarget (s0 , arg maxa ω | Q(s0 , a, ω), ω)
+for envelope version of MORL algorithm. We update the target network by coping from Q-network every
+100 steps. The priority of sampling transition τi = (s, a, r, s0 ) is pscalarized
+= |y double (ω) − Q(s, a, ω)| for the
+i
+envelope
+double
+scalarized version of MORL algorithm, and similarly pi
+= |y
+(ω) − ω | Q(s, a, ω)| for the envelope
+version of algorithm, where ωP
+is sampled from the distribution Dω . When updating the network, a trajectory is
+sampled by τi ∼ P (i) = pi / i pi . The replay memory size is 4000 and the batch size is 32. For the deep tree
+navigation task, we train each model for total 5000 episodes, and update it by Adam optimizer every step after at
+least a batch experiences are stored in reply buffer, with a learning rate lr = 0.001.
+
+Training Details for Dialogue Policy Learning All the single-objective and multi-objective reinforcement learning are trained for 3,000 sessions. We evaluate learned policies on 5,000 sessions with randomly
+assigned user preferences. The preference distribution Dω is same as the one we used in previous deep sea
+treasure experiment (see Section 4.3.1), which is a nearly uniform distribution. For the single-objective reinforcement learning algorithms, we set three groups of ω as {(0.5, 0.5), (0.2, 0.8), (0.8, 0.2)}. For the envelope
+deep MORL algorithms, the homotopy path is a monotonically increasing track where λ increases from 0.0 to
+1.0 exponentially. The number of sampled preferences Nω is 32 for both scalarized and envelope deep MORL
+algorithms. The exploration policy used for training these reinforcement learning algorithms is -greedy, where
+ = 0.5 initially and then decays to zero linearly during the training process. For all the single-objective and
+multi-objective algorithms, we employ the same deep Q-network architecture, which comprises 3 fully connected
+hidden layers with {16, 32, 32} × (dim(S) + m) hidden units. The minibatch size is 64 for all. An Adam
+optimizer is used for updating the parameters of all these algorithms with an initial learning rate rl = 0.001.
+
+Computing Infrastructure We ran the synthetic experiments and the dialog experiments on a workstation
+with one GeForce GTX TITAN X GPU, 12 Intel(R) Core(TM) i7-5820K CPUs @ 3.30GHz, and 32G memory
+and ran the SuperMario experiments on a cluster with twenty 2080 RTX GPUs, 40 CPUs and 200GB memory.
+
+C
+
+Additional Experimental Results
+
+C.1
+
+Evaluation Metrics
+
+We design two metrics to evaluate the empirical performance of our algorithms on test tasks. Slightly different
+from the main article, we introduce adaptation quality (AQ) here other than adaptation error to adjust the value
+range and get a score in (0, 1].
+Coverage Ratio (CR). The first metric is coverage ratio (CR), which evaluates the agent’s ability to recover
+optimal solutions in the convex coverage set (CCS). If F ⊆ Rm is the set of solutions found by the agent (via
+sampled trajectories), we define F ∩ CCS := {x ∈ F | ∃y ∈ CCS s.t. kx − yk1 /kyk1 ≤ } as the intersection
+between these sets with a tolerance of . The CR is then defined as:
+precision · recall
+CRF1 (F) = 2 ·
+,
+(24)
+precision + recall
+
+21
+
+Algorithm 2: Envelope Multi-Objective A3C (EMoA3C) Algorithm - Pseudocode for each actorlearner thread
+Input:
+• a preference sampling distribution Dω ;
+• minibatch sizes for transitions Nτ and for preference Nω ;
+• a multi-objective critic-network V parameterized by θv ;
+• an actor-network π parameterized by θπ ;
+• a balance weight λ for critic losses LA and LB .
+Initialize replay buffer Dτ .
+for episode = 1, . . . , M do
+Synchronize thread-specific parameters θv0 = θv and θπ0 = θπ .
+Sample a linear preference ω ∼ Dω .
+for t = 0, . . . , N − 1 do
+Observe state st .
+Sample an action at using according to policy π(at |st , ω; θπ0 ).
+Receive a multi-objective reward rt and observe new state st+1 .
+Store transition (st , at , rt , st+1 ) in Dτ .
+if update then
+Sample random minibatch of transitions (sj , aj , rj , sj+1 ) from Dτ .
+Sample Nω preferences W = {ω1 , ω2 , . . . , ωNω } ∼ Dω .
+Compute 
+rj .
+for terminal sj+1 ;
+(T V )ij =
+|
+0
+rj + γ argV maxa∈A,ω0 ∈W ωi V (sj+1 , ω ; θ), for non-terminal sj+1 .
+Calculate dθv according to similar equations 6 and 7 w.r.t. θv0 :
+dθv = (1 − λ) · ∇θv0 LA (θv0 ) + λ · ∇θv0 LB (θv0 ).
+Calculate dθπ using the advantage w.r.t. θv0 and θπ0
+1 X
+dθπ =
+∇θπ0 log π(aj |sj , ωi ; θπ0 ) [ωi| ((T V )ij − V (sj , ωi ; θv0 ))] .
+Nω Nτ i,j
+Perform asynchronous update of θv using dθv and of θπ using dθπ .
+
+where the precision = |F ∩ CCS|/|F|, indicating the fraction of optimal solutions among the retrieved
+solutions, and the recall = |F ∩ CCS|/|CCS|, indicating the fraction of optimal instances that have been
+retrieved over the total amount of optimal solutions (see Figure 3(a)). The F1 score is their harmonic mean. In
+our evaluation of both synthetic tasks DST and FTN, we set  = 0.00 for FΠL (executive frontier) and  = 0.20
+for FQ (frontier predicted by Q-function). Figure 9 (a.) illustrates an example of the computation of coverage
+ratio.
+Adaptation Quality (AQ). Our second metric compares the retrieved control frontier with the optimal one,
+when an agent is provided with a specific preference ω during the adaptation phase. The adaptation quality is
+defined by
+1
+AQ(C) =
+,
+(25)
+1 + α · errDω
+where the errDω = Eω∼Dω [|C(ω) − Copt (ω)|/Copt (ω)] is the expected relative error between optimal control
+frontier Copt : Ω → R with ω 7→ maxr̂∈CCS ω | r̂ and the agent’s control frontier Cπω = ω | r̂πω , and α is a
+scaling coefficient to amplify the discrepancy.
+Similarly, CQ is the control frontier guessed by an agent (via predictions from Q-network) and we can compute
+the predictive AQ(CQ ) to evaluate the quality of multi-objective Q-network on the value prediction accuracy.
+In all experiment domains, we use Gaussian distributions which are restricted to be positive part and `1normalized as our Dω . We set α = 0.01 for the DST task (because the penalty range is large), and α = 10.0 for
+the FTN task (because the value differences are small). Figure 9 (b.) shows examples of optimal control frontier,
+retrieved control frontier, and the control discrepancy. Overall, CR provides an indication of agent’s ability to
+learn the space of optimal policies in the learning phase, while AE tests its ability to adapt to new scenarios.
+
+22
+
+C.2
+
+Deep Sea Treasure (DST)
+
+We show more experimental results on DST tasks in this section. We train all agent for 2000 episodes. After
+training in the learning phase, our envelope MORL algorithms find all the potential optimal solutions and their
+corresponding policies.
+Figure 10 presents the real CCS and the retrieved solutions of a MORL algorithm. The scalarized and envelope
+algorithm can find all the whole CCS. Figure 10 (b.) illustrates the real control frontier (the blue curve),
+retrieved control frontier (the green curve), and the predicted control frontier (the orange line). The retrieved
+control frontier is almost overlapped with the real control frontier, which indicates that the alignment between
+preferences and optimal policies is perfectly well. The agent can respond any given preference with the policy
+resulting in best utility.
+
+DST
+
+Method
+MOFQI
+CN+OLS
+Scalarized
+Envelope
+
+Figure 10: The solutions and control frontier found
+by MORL algorithm in the deep sea treasure task. (a.)
+The real CCS and the retrieved solutions. (b.) The
+real control frontier, predicted control frontier, and
+retrieved control frontier in the adaptation phase.
+
+CR F1
+
+Exe-AQ (α = 0.01)
+
+Pred-AQ (α = 0.01)
+
+0.639 ± 0.421
+0.751 ± 0.163
+0.989 ± 0.024
+0.994 ± 0.001
+
+0.417 ± 0.134
+0.743 ± 0.008
+0.998 ± 0.001
+0.998 ± 0.000
+
+0.226 ± 0.138
+0.177 ± 0.089
+0.950 ± 0.034
+0.850 ± 0.045
+
+Table 4: Performance comparison of different MORL algorithm in learning and adaptation phases on the DST environment. The Exe-AQ is the AQ measured on the real
+trajectories in the adaptation phase, and the Pred-AQ is
+the AQ values measured on the predictions of Q functions.
+
+Table 4 provides the coverage ratio (CR) and adaptation quality (AQ) comparisons of different MORL algorithms.
+We trained all the algorithm in 2000 episodes and test for another 2000 episodes. Each data point in the table is
+an average of 5 train and test trails. For the CN+OLS baseline, we allow it to iterate for 25 corner weights. The
+envelope algorithm achieves best CR and execution AQ, and the scalarsized algorithm achieves best predictive
+adaption quality. Note that traditional evaluations rarely test the algorithm’s ability in learning phase and
+adaptation phase separately. Thus our setting is more challenging.
+The classical deep sea treasure task shows the effectiveness of our deep multi-objective reinforcement learning
+algorithms, while it is relatively easy for the agent to find all the good policies. It only contains 10 potentially
+optimal solutions in the real CCS, therefore scalarized algorithm can efficiently solve this problem.
+
+C.3
+
+a.
+
+Fruit Tree Navigation (FTN)
+
+b.
+
+c.
+
+Figure 11: Coverage Ratio (CR) and Adaptation Quality (AQ) comparison of the scalarized deep MORL
+algorithm and the envelope deep MORL algorithm tested on fruit tree navigation tasks of depths d = 5, 6, 7.
+Trained on 5000 episodes and test on 2000 and 5000 episode to estimate CR and AQ, respectively. Each data
+point in the figure is an average of 5 trails of training and test.
+
+Sample Efficiency To compare sample efficiency during the learning phase, we train envelope MORL
+algorithm and baselines on the FTN task of depth 5, 6, 7 for 5000 episodes. We compute coverage ratio (CR)
+over 2000 episodes and adaptation quality (AQ) over 5000 episodes. Figure 11 (blue and orange curves for
+d = 6) shows plots for the metrics computed over a varying number of sampled preferences Nω from 1 to 128.
+When Nω = 1, both algorithms only update under single preference each time, therefore runs fast while it makes
+wasteful use of interactions. When Nω = 128, both algorithm needs to update for 128 sampled preferences in a
+batch. In this case the algorithms run slowly, while can make better use of interactions. Each point on the curve
+is averaged over 5 experiments. We observe that the envelope MORL algorithm consistently has a better CR
+and AQ scores than the scalarized baseline, with smaller variances. As Nω increases, CR and AQ both increase,
+
+23
+
+which shows better use of historical interactions for both algorithms when Nω is larger. This reinforces our
+theoretical analysis that the envelope MORL algorithm has better sample efficiency than the scalarized baseline.
+Table 5 compares their coverage ratios. Each entry in the table is an average of 5 experiments (train and test).
+Due to the property of FTN task that every solution is potentially optimal, the CR precision is always 1 for
+both scalarized and envelope algorithm. While for the recall, which indicates the ability to find unseen optimal
+solutions in the learning phase, the envelope deep MORL algorithm is better than the scalarized version for all
+numbers of sampled preferences, and has relatively lower variances. Therefore the same to F1 scores. As Nω
+increases, the CR value increases for both scalarized version and envelope version algorithms, which verifies aa
+better use of historical interactions for both algorithm when Nω is larger. As here the initial performance for the
+envelope version algorithm is good enough, it suddenly surpasses 0.98 of CR F1 score when it can sample more
+than one preference each update.
+Nω
+1
+4
+8
+16
+32
+64
+128
+
+Execution AQ
+Scalarized
+Envelope
+0.7037 ± 0.012 0.759 ± 0.066
+0.7701 ± 0.026 0.9101 ± 0.006
+0.8205 ± 0.023 0.9261 ± 0.015
+0.8255 ± 0.044 0.9306 ± 0.007
+0.8597 ± 0.035 0.9402 ± 0.011
+0.877 ± 0.031 0.9506 ± 0.001
+0.8705 ± 0.03 0.9536 ± 0.002
+
+Prediction AQ
+Scalarized
+Envelope
+0.6474 ± 0.054 0.6915 ± 0.105
+0.7216 ± 0.034 0.7853 ± 0.049
+0.7714 ± 0.02 0.7675 ± 0.033
+0.8097 ± 0.016 0.8417 ± 0.007
+0.7989 ± 0.032 0.8513 ± 0.01
+0.7778 ± 0.032 0.8497 ± 0.018
+0.8081 ± 0.04
+0.868 ± 0.025
+
+CR F1
+Scalarized
+Envelope
+0.625 ± 0.057
+0.924 ± 0.051
+0.7654 ± 0.077 0.9856 ± 0.004
+0.856 ± 0.067 0.9808 ± 0.007
+0.8976 ± 0.062 0.9952 ± 0.004
+0.914 ± 0.044
+0.987 ± 0.021
+0.9452 ± 0.02 0.9904 ± 0.007
+0.9258 ± 0.024 0.9952 ± 0.011
+
+Table 5: Sample Efficiency - Coverage Ratio (CR) and Adaptation Quality (AQ) comparison of the scalarized
+deep MORL algorithm and the envelope deep MORL algorithm tested on fruit tree navigation task, where the
+tree depth d = 6. Trained on 5000 episodes.
+Nω
+1
+4
+8
+16
+32
+64
+128
+
+Execution AQ
+Scalarized
+Envelope
+0.7943 ± 0.039 0.8578 ± 0.036
+0.8836 ± 0.01 0.9041 ± 0.005
+0.8975 ± 0.003 0.9099 ± 0.001
+0.9047 ± 0.003 0.9109 ± 0.001
+0.9054 ± 0.003 0.9113 ± 0.001
+0.9096 ± 0.003
+0.9119 ± 0
+0.9071 ± 0.004
+0.9121 ± 0
+
+Prediction AQ
+Scalarized
+Envelope
+0.7153 ± 0.079 0.6254 ± 0.041
+0.8195 ± 0.021 0.7843 ± 0.055
+0.8427 ± 0.022 0.7952 ± 0.023
+0.8698 ± 0.01 0.8488 ± 0.032
+0.8647 ± 0.014 0.8847 ± 0.006
+0.8761 ± 0.024 0.8731 ± 0.008
+0.8535 ± 0.033 0.8809 ± 0.026
+
+CR F1
+Scalarized
+Envelope
+0.9364 ± 0.023 0.9706 ± 0.027
+0.984 ± 0.016
+1±0
+0.9968 ± 0.007
+1±0
+1±0
+1±0
+0.9968 ± 0.007
+1±0
+0.9968 ± 0.007
+1±0
+1±0
+1±0
+
+Table 6: Sample Efficiency when d = 5 - Coverage Ratio (CR) and Adaptation Quality (AQ) comparison of the
+scalarized and the envelope deep MORL algorithms tested on fruit tree navigation task, where the tree depth
+d = 5. Trained on 5000 episodes.
+Table 5 also compares MORL algorithms’ adaptation quality in the adaptation phase. Each entry in the table is
+an average of 5 experiments (train and test). For all numbers of sampled preferences, the envelope deep MORL
+algorithm has better execution AQ than the scalarized algorithm, in spite of better CR of the envelope version, it
+also indicates the envelope version algorithm has better alignment between preferences and policies. As Nω
+increases, the values of execution AQ and prediction AQ of both algorithms keep increase. Note that even though
+when Nω = 1 the execution AQ of the scalarized version and the envelope version differs only around 0.5,
+when Nω increase to 4, the envelope version algorithm better utilizes the sampled preferences to improve the
+execution AQ to above 0.9. This agrees with our theoretical analysis that our envelope deep MORL algorithm
+has better sample efficiency than the scalarized version.
+We also investigate how the size of optimality frontiers will affect the performance of our algorithms. We train
+our deep MORL algorithms on two new FTN environments with d = 5 and d = 7 respectively. One is smaller
+than the previous environment, which contains only 32 optimal solutions, the other is larger than the previous
+environment, containing 128 solutions on the CCS. We fix the number of episode for training as 5000, and test
+2000 episode to obtain coverage ratio, and test 5000 episode for policy adaptation quality.
+Table 6 shows the results of coverage ratio evaluation in the environment of tree depth d = 5. As it shows,
+both scalarized and envelope algorithms work well in that environment. the CR F1 scores are very close to 1.
+The envelope version algorithm is more stable than the scalarized version deep MORL algorithm. Besides, the
+envelope deep MORL algorithm can predict multi-objective solutions, while the scalarized algorithm cannot.
+The prediction ability will also be improved as Nω increases.
+
+Visualizing Frontiers We also provide a visualization of the convex coverage set (CCS) and control frontier
+for our envelope algorithm and the scalarized baseline in Figure 12. The left figure shows the real CCS and
+retrieved CCS of both MORL algorithms using t-SNE [50]. We observe that the envelope algorithm (green dots)
+almost completely covers the entire set of optimal solutions in the real CCS whereas the scalarized algorithm
+(pink dots) does not. The right figure presents the slices of optimal control frontier and the control frontier of our
+algorithms along the Minerals-Water plane. The envelope version retrieves almost the entire optimal frontier,
+
+24
+
+Nω
+1
+4
+8
+16
+32
+64
+128
+
+Execution AQ
+Scalarized
+Envelope
+0.3748 ± 0.038 0.6348 ± 0.063
+0.5112 ± 0.063 0.6846 ± 0.067
+0.5376 ± 0.046 0.7516 ± 0.039
+0.6052 ± 0.061 0.7328 ± 0.043
+0.5646 ± 0.061 0.7862 ± 0.049
+0.6168 ± 0.043 0.743 ± 0.086
+0.6308 ± 0.058 0.8138 ± 0.038
+
+Prediction AQ
+Scalarized
+Envelope
+0.624 ± 0.012 0.6646 ± 0.025
+0.6704 ± 0.006 0.730 ± 0.018
+0.6763 ± 0.022 0.7237 ± 0.018
+0.6867 ± 0.025 0.7473 ± 0.023
+0.6828 ± 0.022 0.7204 ± 0.05
+0.671 ± 0.06
+0.7429 ± 0.015
+0.6916 ± 0.015 0.7586 ± 0.024
+
+CR F1
+Scalarized
+Envelope
+0.5847 ± 0.061
+0.60 ± 0.029
+0.6969 ± 0.057 0.6544 ± 0.066
+0.6837 ± 0.097 0.7437 ± 0.04
+0.6532 ± 0.029 0.7936 ± 0.015
+0.6829 ± 0.037 0.7997 ± 0.017
+0.7284 ± 0.03 0.8112
+0.018
+FT±Control
+Frontier
+0.6719 ± 0.076 0.8199 ± 0.008
+
+Table 7: Sample Efficiency when d = 7 - Coverage Ratio (CR) and Adaptation Quality (AQ) comparison of the
+scalarized and the envelope deep MORL algorithms tested on fruit tree navigation task, where the tree depth
+FT Pareto Frontier - crl-naive
+FT Control Frontier
+d = 7. Trained on 5000
+episodes.
+FT Pareto
+Frontier - crl-naive
+
+a.
+
+b.
+
+Real CCS
+Execution(Envelope)
+
+8
+
+50
+
+50
+
+Waters Water
+
+Water
+
+Water
+
+0
+
+4
+
+−50
+
+6
+
+4
+
+4
+
+2
+
+!e
+
+4
+
+0
+0
+
+−50
+
+0
+
+50
+
+!) ·
+
+Minerals
+
+6
+
+0
+0
+
+2
+
+8
+>
+>
+>
+>
+>
+>
+
+0
+0
+
+C ⇡(
+
+>
+>
+>
+>
+>
+
+50
+
+>
+>
+8>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>>
+>
+>
+>
+<
+>
+>
+>
+>
+<>
+>
+
+2
+
+2
+
+0
+
+Execution(Envelope)
+
+>
+>
+>
+>
+>
+>
+>>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>>
+>
+>
+>
+>
+>
+(
+>
+>
+>
+>
+>
+>
+>
+>
+>
+>
+:
+:>
+
+−50
+
+Real Control Frontier
+
+(Scalarized)
+Execution(Naive)
+
+Execution(Naive)
+
+2
+
+−50
+
+Real Control Frontier
+
+6
+
+8
+
+0
+
+FT Control Frontier
+Execution(Envelope)
+
+(Scalarized)
+Execution(Naive)
+
+6
+
+8
+
+!e
+
+(! )
+C opt
+
+· !e
+
+8
+4
+
+2
+Minerals
+
+6
+
+4
+
+8
+
+Minerals
+
+Figure 12: Comparison of CCS and control frontiers of deep MORL algorithms. The left figure (a) Minerals
+is visualizing
+the real CCS and retrieved CCS of scalarized and envelope MORL algorithms using t-SNE. The right figure
+(b) presents the slices of optimal control frontier and the control frontier of scalarized and envelope MORL
+algorithms along the Mineral-Waters plane.
+
+while the scalarized version algorithm has larger control discrepancies. The small discrepancy between the real
+control frontier and the one retrieved by envelope version algorithm at the indentation of the frontier indicates an
+alignment issue between the preferences and optimal policies.
+
+C.4
+
+SR
+#T
+UT
+AQ
+
+Task-Oriented Dialog Policy Learning (Dialog)
+
+Single-(0.5,0.5)
+88.18 ± 0.90
+8.93 ± 0.13
+2.13 ± 0.23
+0.660
+
+Single-(0.2,0.8)
+85.30 ± 0.98
+9.40 ± 0.16
+1.84 ± 0.23
+0.279
+
+Single-(0.8,0.2)
+87.62 ± 0.91
+7.42 ± 0.10
+2.53 ± 0.22
+0.728
+
+Scalarized
+86.38 ± 0.95
+8.08 ± 0.12
+2.38 ± 0.22
+0.614
+
+Envelope
+89.52 ± 0.85
+8.08 ± 0.12
+2.65 ± 0.22
+0.814
+
+Table 8: The average success rate (SR), number of turns (#T), user utility (UT), and adaptation quality (AQ,
+α = 0.1) of policies obtained by single-objective RL baselines and two MORL algorithms.
+
+Table 8 shows that envelope MORL algorithm achieves best success rate (SR) on average, while the singleobjective method with equal weight on both dimensions (0.5) achieves competitive performance. However, on
+metrics of average utility (UT) and adaptation quality (AQ) (with α = 0.1, envelope MORL is significantly
+better than the other methods, including scalarized MORL. This again demonstrates that adaptability of envelope
+MORL to tasks with new preferences. The single-objective method with 0.8 success weight has the worst
+performance on success rate eventually. This is might because lack of turn level reward guidance directly
+optimize for success is very difficult for the single-objective RL learner.
+Figure 13 illustrates utility-weight curves during a policy adaptation phase with given preferences, where each
+data point is a moving average of closest 500 dialogues in the interval of around ± 0.05 weight of success over
+three trained policies. We find the envelope deep MORL algorithm is almost always better than other methods
+in terms of utility under certain given preferences, and the scalarized MORL baseline keeps a good level of
+
+25
+
+6
+
+8
+
+Envelope .ers8on
+S20l0r8zed .ers8on
+S8ngle-+bj (0.( turn + 0.( su22)
+S8ngle-+bj (0.2 turn + 0.) su22)
+S8ngle-+bj (0.) turn + 0.2 su22)
+
+Envelope version
+Scalarized version
+Single-obj (0.5 turn + 0.5 succ)
+
+User Utility
+
+Single-obj (0.2 turn + 0.8 succ)
+Single-obj (0.8 turn + 0.2succ)
+
+Weight of Success
+
+2ess
+
+Figure 13: Utility-weight curves for the MORL and single-objective RL dialog policy learning after 3,000
+training dialogues. We evaluate policies on 5,000 dialogues with near-uniformly randomly sampled preference.
+For each curve, each data point is a moving average of the closest 500 dialogues in the interval of around ± 0.05
+weight of success over three trained policies.
+
+utility under almost all user preferences. Single-objective RL algorithms are good only when the user’s weight
+of success is close to their fixed preferences while training.
+
+C.5
+
+Multi-Objective SuperMario Game (SuperMario)
+Super Mario
+
+Method
+Scalarized
+Envelope
+
+Avg.UT (0.5 x-pos & 0.5 time)
+
+Avg.UT (0.5 coin & 0.5 enemy)
+
+Avg.UT (uniform preference)
+
+317.1 ± 123.7
+600.9 ± 114.9
+
+76.7 ± 36.5
+233.3 ± 31.2
+
+301.7 ± 49.2
+319.7 ± 34.4
+
+Table 9: Performance comparison of different MORL algorithm in learning and adaptation phases on the
+SuperMario environment under three different preferences. The first preference emphasizes the fast completion
+of the task so it is 0.5 on x-pos and 0.5 time, the second preference emphasizes collecting coin and eliminating
+enemy. The third is a uniform preference which has weights 0.2 for all five objectives {x-pos, time, death,
+coin, enemy}
+We compared the average utility of the scalarized baseline and the MORL algorithm with envelope update.
+The first preference emphasizes the fast completion of the task so it is 0.5 on x-pos and 0.5 time, the second
+preference emphasizes collecting coin and eliminating enemy. The third is a uniform preference which has
+weights 0.2 for all five objectives {x-pos, time, death, coin, enemy}. The envelope algorithm outperforms
+the scalarized algorithm under all these preferences.
+
+Score
+
+X-pos
+
+Time
+
+Enemy
+
+Death
+
+Coin
+
+Figure 14: The training curves of the Envelope Multi-Objective A3C (EMoA3C) algorithm.
+
+26
+
+Table 10: Inferred preferences of the scalarized
+multi-objective A3C algorithm in different Mario
+Game variants with 100 episodes.
+g1
+g2
+g3
+g4
+g5
+
+x-pos
+0.2315
+0.1600
+0.1865
+0.1250
+0.2378
+
+time
+0.2569
+0.1408
+0.1837
+0.3062
+0.1673
+
+life
+0.335
+0.2822
+0.0874
+0.3522
+0.1820
+
+coin
+0.0522
+0.1955
+0.3759
+0.1240
+0.3432
+
+Table 11: The difference between the inferred preferences of the envelope and the scalarized multiobjective A3C algorithms.
+
+enemy
+0.1243
+0.2216
+0.1665
+0.0926
+0.0698
+
+g1
+g2
+g3
+g4
+g5
+
+x-pos
++0.2973
++0.0385
++0.0331
+-0.1039
+-0.1663
+
+time
+-0.0799
++0.0829
+-0.0541
+-0.0658
+-0.0635
+
+life
+-0.1850
+-0.0337
++0.2667
+-0.3311
++0.0249
+
+coin
+-0.0052
+-0.0533
+-0.1967
++0.5720
++0.0490
+
+enemy
+-0.0271
+-0.0348
+-0.0490
+-0.0715
++0.1555
+
+The training curves of EMoA3C algorithm are shown in Figure 14. To plot Figure 14, we use a uniform
+preference [0.2 0.2 0.2 0.2 0.2] as the probe preference to sample trajectories for evaluation. We observe the
+algorithm converges within around 5k episodes of training.
+Finally we compare the difference between the inferred preferences of the envelope and the scalarized multiobjective A3C algorithm on different variants of SuperMario game, g1 to g5, where only corresponding scalar
+rewards are available. We only consider maximizing one objective in each game variant, because this orthogonal
+design helps us characterize the behaviors of agents and compare their inferred preferences. We allow agents to
+make 100 episodes interactions in each game variance, to determine the preference. Note that only 100 episodes
+are far from enough for training a single objective reinforcement learning agent, even the model is pre-trained on
+other tasks.
+As Table 11 illustrates, the preferences inferred by the envelope MoA3C agent is more concentrate on the
+diagonal than that of scalarized MoA3C agent, which is more closer to the true underlying preferences.
+Even though the EMoA3C agent can do better, our experiments show that the inferred preferences are not exactly
+the true underlying preferences. It is mainly for two reasons: First, the trade-off frontiers and policy-preference
+alignment learned by the algorithm is not ideal. There might be some discrepancies between the obtained control
+frontier and the real optimal control frontier just like what Figure 12 (b) illustrates. Second, even the agent
+perfectly learned the frontier and the alignment, close preferences may correspond to the policies with the same
+expected returns.
+We also deploy the trained EMoA3C agents in a Mario Game where only game scores are available. After 100
+episodes adaptation, the EMoA3C agent infers that the underlying preference for the achieving higher score
+mainly focuses on x-pos (0.3725) and time (0.2307), which is coincident with the strategy human players
+commonly use – to achieve higher score, especially the stage accomplishment bonus, the first priority is to
+ensure Mario can move forward towards the flag within the time limit.
+
+27
+
+

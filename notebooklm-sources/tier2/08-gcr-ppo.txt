@@ -1,0 +1,1113 @@
+Scalable Multi-Objective Robot Reinforcement Learning through
+Gradient Conflict Resolution
+Humphrey Munn1,2 , Brendan Tidd2 , Peter Böhm1,2 , Marcus Gallagher1 , David Howard2
+
+arXiv:2509.14816v1 [cs.RO] 18 Sep 2025
+
+PPO
+
+GCR- PPO
+
+Fig. 1: Comparison of GCR-PPO and massively parallel PPO on four select tasks tested: Quadcopter, Full-Body Throwing (multi objective), Humanoid
+Running (multi objective: gait length, energy usage, arm span, base height), and Allegro-Cube. Both methods perform similarly on the Quadcopter, where
+gradient conflict is low. GCR-PPO achieves substantial gains on the other three tasks, which show high gradient conflict. Overall, GCR-PPO mitigates
+conflicts between objectives and scales more favourably than standard parallelised PPO.
+
+Abstract— Reinforcement Learning (RL) robot controllers
+usually aggregate many task objectives into one scalar reward.
+While large-scale proximal policy optimisation (PPO) has enabled impressive results such as robust robot locomotion in the
+real world, many tasks still require careful reward tuning and
+are brittle to local optima. Tuning cost and sub-optimality grow
+with the number of objectives, limiting scalability. Modelling
+reward vectors and their trade-offs can address these issues;
+however, multi-objective methods remain underused in RL for
+robotics because of computational cost and optimisation difficulty. In this work, we investigate the conflict between gradient
+contributions for each objective that emerge from scalarising
+the task objectives. In particular, we explicitly address the
+conflict between task-based rewards and terms that regularise
+the policy towards realistic behaviour. We propose GCR-PPO,
+a modification to actor-critic optimisation that decomposes
+the actor update into objective-wise gradients using a multiheaded critic and resolves conflicts based on the objective
+priority. Our methodology, GCR-PPO, is evaluated on the wellknown IsaacLab manipulation and locomotion benchmarks and
+additional multi-objective modifications on two related tasks.
+We show superior scalability compared to parallel PPO (p =
+0.04), without significant computational overhead. We also show
+higher performance with more conflicting tasks. GCR-PPO
+improves on large-scale PPO with an average improvement of
+9.5% (Symmetric Percentage Change), with high-conflict tasks
+observing a greater improvement 1 .
+
+I. INTRODUCTION
+As robotics continues to find application in increasingly
+complex real-world tasks, scalable Reinforcement Learning
+(RL) pipelines become increasingly important. Scalability
+issues persist across various parts of robotic RL [1], [2], for
+1 Humphrey
+Munn,
+Peter
+Böhm,
+and
+Marcus
+Gallagher
+are with the School of Electrical Engineering and Computer
+Science,
+University
+of
+Queensland,
+QLD.
+4072,
+Australia
+{h.munn,p.bohm,marcusg}@uq.edu.au
+2 Humphrey Munn, Brendan Tidd, Peter Böhm, and David Howard are
+with {humphrey.munn,brendan.tidd,peter.bohm,
+
+david.howard} @data61.csiro.au
+1 The code is available at https://github.com/humphreymunn/GCR-PPO.
+
+example in sample efficiency (as the robot must repeatedly interact with its environment to iteratively tune its behaviour),
+and in behavioural complexity, which refers to learning larger
+numbers of tasks or objectives to achieve more capable
+and flexible behaviours. Issues remain with both, but a
+combination of (i) recent development of reasonably accurate
+and fast parallel simulators [3], [4] to address the former
+problem, and (ii) a relative lack of literature addressing the
+latter issue, behavioural complexity is arguably the more
+relevant.
+Behavioural complexity takes two primary forms - multitask and multi-objective. Multi-task can be thought of as,
+for example, a ‘kitchen robot’ that can boil a kettle, open
+the fridge, cook, and do the washing up [5]. Each task must
+be explicitly defined, atomic and separated in time. Multiobjective addresses the challenge of simultaneously balancing multiple requirements, which may change through time,
+and thus provides an opportunity for emergent behaviour
+without explicitly defining tasks. Adapting to balance larger
+numbers of objectives allows for more complex behaviours to
+be realised and is therefore a precursor to successful deployment of useful general-purpose robotics solutions in, e.g., the
+kitchen or a laboratory. However, for the state of the art in
+multi-objective RL for robotics, issues including the inability
+to effectively handle conflicts between objectives and the
+poor sample efficiency/generalisation across objectives mean
+scalability and complexity are limited.
+We directly address this issue by focusing on scalable
+multi-objective learning, which practically involves combining multiple reward signals into a single policy without
+disrupting the overall optimisation process, allowing us to
+encourage the development of more complex behaviours
+by representing larger numbers of objectives in the reward
+function. We develop a solution based on gradient repair [6]
+for actor-critic methods, which we call Gradient Conflict
+Resolution or GCR. In this work, we integrate gradient
+
+conflict resolution (GCR) into Proximal Policy Optimisation
+(PPO), referring to the resulting algorithm as GCR-PPO.
+GCR-PPO provides a scalable approach for reinforcement
+learning agents to balance and learn from multiple reward
+signals simultaneously through conflict resolution, thereby
+preventing important objectives from being lost in scalarisation and leading to more nuanced and capable behaviours.
+Contrasting previous approaches [7], GCR-PPO explicitly
+handles conflicting objectives, which are ubiquitous in realworld scenarios and remain a central challenge for modern
+RL, while scaling effectively with increasing numbers of
+objectives.
+Our key novel contributions are:
+• Prioritisation-based
+gradient resolution, extending
+PCGrad[6] to respect the robotics-specific distinction
+between task objectives and regularisers.
+• A multi-head critic for efficient per-reward advantage
+estimation.
+• Large-scale comparisons against massively parallel
+GPU-based PPO on challenging robotic RL benchmarks, including custom multi-objective tasks.
+Through a series of experiments, we show that GCRPPO scales better than PPO with the number of objectives,
+enabling more complex behaviours. For example, Humanoid
+Running discovers a stylised fast gait—long strides at a low
+base height—. In contrast, massively parallel PPO typically
+solves only the fundamental running objective and fails
+to realise the stylised variant. Across 13 IsaacLab tasks,
+GCR-PPO achieves an average +4.6% symmetric percentage
+change (SPC) over PPO, with gains increasing in tasks
+exhibiting higher gradient conflict (Spearman ρ = 0.736, p =
+0.0041). On two custom multi-objective suites, it reaches up
+to +542% SPC relative to massively parallel PPO for specific
+Humanoid configurations. A consistent trend emerges: as
+more objectives are added, the PPO baseline is prone to
+poor convergence points that optimise a single term rather
+than the joint objective set, whereas GCR-PPO more reliably
+identifies and optimises a feasible subset of objectives jointly,
+reducing conflicts over training.
+II. RELATED WORK
+Managing and integrating potentially conflicting behavioural goals is a central challenge in robot control, where
+the system must still achieve its overall objective [8], [9].
+A longstanding issue in robotic reinforcement learning is
+the construction of objective functions that enable complex,
+capable, and safe behaviours [10], [11]. The gap lies between
+efficient single-objective RL, which optimises tasks using
+a single scalar reward, and the richer reward geometries
+required to simultaneously optimise for task success while
+regularising behaviour to be realistic and safe. Addressing
+this gap is necessary for scalable RL with many objectives,
+particularly in more complex tasks.
+A. Classical Control and Task Prioritisation
+Early solutions to conflicting objectives in robotics were
+developed in classical control, most notably prioritised con-
+
+trol and stack-of-tasks methods [12], [13]. These approaches
+project lower-priority objectives into the null space of higherpriority ones, ensuring that secondary goals never compromise critical tasks (e.g., balance or obstacle avoidance). They
+have been successfully applied in humanoid and wholebody control, where accurate system models and strict task
+hierarchies are available. However, these methods depend on
+exact system models and manually specified task hierarchies,
+which limit their applicability in modern reinforcement learning.
+In RL, objectives are encoded implicitly through reward
+terms rather than explicit priorities, and interaction is often
+model-free with noisy gradient feedback. RL is therefore
+preferred for scaling to high-dimensional, uncertain environments where rigid model-based prioritisation is impractical
+[14]. Nevertheless, resolving conflicts through projection has
+influenced more recent gradient-based methods [6], [15], [16]
+in learning-based control, and underpins our approach to
+prioritising objectives defined by reward terms.
+B. Single-Objective Reward Combination in Reinforcement
+Learning
+In most reinforcement learning for robotics, multiple reward terms are combined into a single scalar objective, and
+standard algorithms such as PPO [17] with generalised advantage estimation (GAE) [18] are applied to stabilise training. While effective for many tasks, this approach treats all
+objectives as fully aligned, ignoring potential conflicts. Methods like PopArt [19] adaptively rescale value predictions to
+address scale imbalance, but they do not mitigate interference
+between competing reward signals. Similarly, auxiliary-task
+methods such as UNREAL [20] and distributed frameworks
+like IMPALA [21] enhance sample efficiency and representation learning. Yet, they remain complementary rather than
+providing a mechanism for resolving conflicting objectives.
+Prior work on reward shaping [22] further demonstrates the
+importance of reward design, but none explicitly address the
+gradient-level conflicts that arise when multiple objectives
+must be satisfied simultaneously.
+C. Multi-Objective Reinforcement Learning
+Multi-objective reinforcement learning (MORL) [11] extends the standard RL setting to optimise multiple, potentially conflicting objectives simultaneously [7], [23]. A typical formulation seeks policies that approximate the Pareto
+front, i.e., the set of policies that are not dominated in all
+objectives. Exact Pareto-optimal methods [23] are attractive
+because they provide principled guarantees but are computationally intractable in high-dimensional problems. Approximations—such as computing convex combinations of
+objectives or using variants of the Multiple Gradient Descent
+Algorithm (MGDA) [24] remain costly in high-dimensional
+settings such as robotic RL or with many objectives, as
+they require repeated optimisation of vector-valued value
+functions or constrained sub-problems.
+Many MORL methods adopt scalarisation strategies to
+improve scalability, where a weighted sum of objectives is
+
+optimised [25]. While computationally efficient, scalarisation hides conflicts and requires carefully chosen weights,
+which may not generalise across tasks or environments.
+Other approaches explore decomposition methods, such as
+learning multiple value functions for each objective [26], but
+these remain limited by sample complexity and optimisation
+overhead.
+
+A)
+
+B)
+Critic
+
+.
+.
+.
+
+Value
+Estimation
+
+Generalised
+Advantage
+Estimation
+
+.
+.
+.
+
+Critic Obs.
+
+C)
+
+D)
+
+E)
+Actor
+Update
+
+Actor
+
+D. Multi-Task Reinforcement Learning
+Multi-task reinforcement learning (MTRL) aims to train
+a single policy to solve multiple tasks, typically by sharing
+representations across tasks [27]. While multi-objective RL
+(MORL) focuses on optimising several reward terms within
+one task, MTRL treats each task as a separate objective
+instead. Both settings face the same optimisation challenge:
+gradients from different objectives may conflict, leading to
+destructive interference during training.
+Recent methods take heuristic approaches: PCGrad [6]
+projects gradients to reduce interference and shows substantial empirical gains, though without theoretical convergence
+guarantees. Conflict-averse gradient descent (CAGrad) [28]
+adds convergence guarantees at the cost of greater computational complexity. In contrast, our approach extends the
+lightweight PCGrad framework with priority-based projections tailored to the robotics setting, where task objectives
+and regularisers must be distinguished.
+E. Connections Between Multi-Task and Multi-Objective RL
+In multi-task reinforcement learning, gradients from several distinct tasks are aggregated to update a single policy
+[27]. Additive-reward RL can be seen as a related formulation: summing reward components into a scalar corresponds
+to optimising multiple objectives, but with all components
+sharing the same state–action trajectories rather than distinct
+task distributions. This difference aside, both settings face
+the same optimisation challenges, notably destructive interference from conflicting gradients. In additive-reward RL,
+these conflicts are often hidden by scalarisation.
+Recent multi-objective RL literature highlights how scalarisation masks such challenges. Vamplew et al. [29] show
+that scalarisation can lead to suboptimal policies due to
+value function interference when heterogeneous rewards are
+collapsed into a single utility. Dann et al. [30] demonstrate
+the benefits of treating multiple rewards explicitly rather than
+averaging them into a single signal.
+A related work is CoMOGA [31], which frames CMORL
+updates as constrained sub-problems to aggregate gradients
+conflict-free with safety guarantees, yielding tabular guarantees and Pareto coverage. In contrast, we address single-task
+additive rewards in PPO, resolving conflicts with lightweight
+priority-based PCGrad projections aimed at scalability and
+on-policy practicality rather than constrained Pareto sets.
+Building on these insights, we explicitly decompose
+the scalar objective into per-component losses and gradients using a multi-head critic architecture. This decomposition makes hidden conflicts observable and allows
+gradient-surgery techniques from multi-task optimisation
+
+Backpropagate
+
+PC_Grad (conflict resolution)
+
+Fig. 2: GCR-PPO assumes an additive reward decomposition r = r0 +· · ·+
+rk , each term obtains a surrogate loss, and resolves gradient conflicts for
+scalability to multi-objective settings. (A) A multi-headed critic estimates
+values for each reward term. (B) These are processed with GAE and
+standardised (preserving relative scale) to yield per-term advantages. (C)
+Surrogate losses are computed, and (D) their gradients are projected with
+PCGrad so conflicts do not weaken higher-priority terms. (E) The projected
+gradients are aggregated into a single update for the actor.
+
+(e.g., projection-based conflict resolution) to be applied in
+the multi-objective setting.
+III. METHOD
+We adapt the publicly available RSL-RL implementation
+of proximal policy optimisation (PPO) [3] for our GCRPPO implementation. All hyperparameters are identical to
+the default RSL-RL IsaacLab configurations per task, except
+for the entropy coefficient, which is tuned as described in
+Section IV-A.
+A. Reinforcement Learning Formulation
+We consider a discounted Markov Decision Process
+(MDP)
+M = (S, A, P, r, γ),
+with state space S, action space A, transition kernel P (st+1 |
+st , at ), reward function r : S × A → R, and discount factor
+γ ∈ (0, 1). A stochastic policy πθ (at | st ) maximises the
+expected discounted return
+∞
+hX
+i
+J(πθ ) = Eπθ
+γ t rt .
+t=0
+
+We assume an additive per-step reward
+r(st , at ) =
+
+K
+X
+
+r(st , at )(k) ,
+
+k=1
+(k)
+where rt are reward components specified by the practi-
+
+tioner. This construction is common in robotics, often including terms for task completion or success, and regularising
+terms to control efficiency.
+We partition the reward components into two disjoint
+categories via index sets IT (task-based) and IR (regulariserbased), with
+IT ∪ IR = {1, . . . , K}.
+Task-based components reflect objective attainment (e.g., forward velocity tracking, goal proximity, task success), while
+
+regulariser components encourage stability or efficiency (e.g.,
+torque penalties, joint-limit costs). This separation enables
+our method to limit task deterioration due to regularising
+terms.
+For each component, define the discounted return
+(k)
+
+Gt
+
+=
+
+∞
+X
+
+′
+
+(k)
+
+γ t −t rt′ .
+
+t′ =t
+
+Then the total return and objective decompose as:
+Gt =
+
+K
+X
+
+(k)
+
+Gt ,
+
+J(πθ ) =
+
+k=1
+
+K
+X
+
+J (k) (πθ ),
+
+k=1
+
+where
+ (k) 
+J (k) (πθ ) = Eπθ G0 .
+This formulation yields a value function for each reward component. With a minor adaptation of generalised
+advantage estimation (GAE) [32] (Section III-B), we compute component-wise advantages and the corresponding
+surrogate-policy gradients per objective. These gradients
+enable the gradient-resolution mechanisms introduced in
+Section III-D.
+B. Multi-head critic and component-wise advantages
+K
+
+We parameterise a vector-valued critic Vϕ : S → R
+(k)
+with k-th head Vϕ (s) predicting the discounted value of
+the k-th component r(k) , i.e.
+#
+"∞
+X
+(k)
+ℓ (k)
+k = 1, . . . , K.
+Vϕ (st ) ≈ E
+γ rt+ℓ st ,
+ℓ=0
+
+We train all heads jointly by least squares against boot(k)
+strapped per-component targets Ĝt :
+#
+"K
+X (k)
+2
+(k)
+1
+Ĝt − Vϕ (st )
+.
+LV (ϕ) = 2 E
+k=1
+
+Component-wise Generalised Advantage Estimation
+(GAE) is computed with the per-component temporaldifference residuals
+
+C. Advantage normalisation strategy
+Directly summing the raw per-component advantages
+(k)
+{At }K
+k=1 can lead to imbalance, since different reward
+terms often have very different magnitudes. Standard PPO
+implementations—such as Stable Baselines3 [33], RSL RL
+[34], and skrl [35]—address this by standardising advantages
+within each batch to unit variance. However, applying this
+procedure independently to each component would eliminate
+their relative scale in the multi-component setting. To avoid
+this, we adopt a normalisation strategy that preserves intercomponent ratios while ensuring the combined advantage has
+unit variance.
+We centre each component advantage and apply a global
+scale so the summed advantage has unit variance while
+preserving component ratios:
+Ât = √ A⊤t −µ
+
+1 C1+ε
+
+,
+
+µ = N1
+
+N
+X
+t=1
+
+N
+X
+(At − µ)(At − µ)⊤ ,
+C = N 1−1
+
+At ,
+(1)
+
+t=1
+
+where N is thetotal number
+ of samples in the batch. By
+PK
+(k)
+Ã
+= 1. This property provides
+construction, Var
+k=1 t
+a stable baseline for subsequent policy-gradient updates.
+D. Gradient resolution strategy
+We use the standard PPO clipped surrogate for each component with the same clipping coefficient ϵ as the baseline.
+With importance ratio ρt = πθ (at | st )/πθold (at | st ) and
+(k)
+normalised advantage Ât , the per-component loss is
+h
+i
+(k)
+(k)
+(k) 
+Lpolicy (θ) = − E min ρt Ât , clip(ρt , 1 − ϵ, 1 + ϵ) Ât
+.
+(2)
+We found that per-component clipping with the same threshold as the baseline (typically 0.2) works well in practice. The
+default learning-rate scheduler adapts to maintain a target KL
+divergence, further curbing destructive policy updates.
+The gradient of each loss,
+g(k) = ∇θ L(k) (θ),
+
+(3)
+
+represents the update direction associated with the k-th
+reward component. With multiple objectives, these gradient
+vectors can conflict—i.e., g(i)⊤ g(j) < 0 (negative cosine
+(k)
+(k)
+(k)
+(k)
+similarity)—so improving one objective can decrease anδt = r̃t + γ(1 − dt ) Vϕ (st+1 ) − Vϕ (st ),
+other.
+where dt ∈ {0, 1} indicates termination. For a trajectory
+We use the Projected Conflicting Gradient (PCGrad) alsegment of length T , the component-wise advantages are
+gorithm [6] to resolve conflicts that are detrimental to task
+
+
+success. Given two component gradients g(i) and g(j) , if
+TX
+−1−t
+ℓ−1
+Y
+
+ℓ
+their inner product is negative (g(i)⊤ g(j) < 0), we project
+(k)
+(k)
+At =
+γλ  (1 − dt+j ) δt+ℓ ,
+k = 1, . . . , K,
+the lower-priority gradient onto the orthogonal complement
+j=0
+ℓ=0
+of the higher-priority one:
+and the corresponding TD(λ) targets used in LV are
+g(i)⊤ g(j) (j)
+g(i) ← g(i) −
+g .
+(k)
+(k)
+(k)
+∥g(j) ∥2
+Ĝt = At + Vϕ (st ).
+This removes only the conflicting component, preserving
+Stacking across components yields the advantage vector non-conflicting directions and ensuring higher-priority ob(1)
+(K)
+At = [At , . . . , At ]⊤ .
+jectives are never weakened. Unlike the original PCGrad,
+
+which treats all objectives symmetrically, our variant enforces priority by making the projection asymmetric: lowerpriority gradients are adjusted, while higher-priority ones
+remain unchanged.
+Priority is determined by reward type:
+• Task-based gradients take precedence. If a conflict occurs between a task-based and a regulariser component,
+the regulariser gradient is projected onto the task-based
+direction.
+• Task–task conflicts are handled symmetrically with
+PCGrad, ensuring neither dominates completely.
+• Regulariser–regulariser conflicts are also handled
+symmetrically with PCGrad, as they do not imply
+conflict with the task.
+The final policy update direction is the sum of the adjusted
+gradients
+K
+X
+(k)
+gfinal =
+gproj .
+k=1
+
+This scheme ensures that task-related objectives drive
+learning, while regularisers act as soft constraints. Nondeterministic projection maintains diversity of gradient directions across mini-batches, encouraging stable yet taskfocused policy improvement.
+IV. EXPERIMENTS AND RESULTS
+To assess the effectiveness of GCR-PPO in highly multiobjective settings, we evaluate it on three sets of problems.
+The first is the IsaacLab Task Suite [36], which provides a
+diverse collection of challenging and realistically deployable
+tasks. We selected this suite for its breadth and the presence
+of several environments with many (≥10) reward terms. The
+second group of evaluations considers extensions of two
+multi-objective whole-body control problems on a high DoF
+humanoid robot, Full-Body Throwing [37] and Humanoid
+Running [36]. We introduce multiple style-based objectives
+as additional reward components for each, using varying
+combinations to generate a wide range of multi-objective
+tasks. This design allows us to test the robustness of GCRPPO across benchmark and custom problem variations for
+213 unique tasks.
+A. IsaacLab Task Suite
+Thirteen tasks were selected for evaluation, spanning both
+manipulation and locomotion across a range of robot platforms. We omitted some tasks because they were redundant
+with others (e.g., multiple quadruped walking tasks) or
+lacked a reward definition. Table I reports the returns and
+conflict levels for the selected tasks. Conflict was measured
+as the number of objective gradient conflicts (>90◦ ) through
+training, with the average shown. Task descriptions are
+available in [36].
+During training, we observed differences in policy entropy
+between the baseline and our method when the entropy coefficient was not re-tuned, as our approach tended to decrease
+the learned standard deviation σ of the actor’s Gaussian
+
+Fig. 3: Relative improvement (symmetric percentage change) of GCR-PPO
+over PPO, averaged across 10 seeds each, as a function of the average
+number of competing objective pairs per task. Blue points are standard
+IsaacLab tasks; orange points are our custom multi-objective variants
+(Section IV-B).
+
+action distribution. We tuned the entropy coefficient λ separately for each method and task to address this. Specifically,
+we sampled λ on a log scale from [10−4 , 0.03], evaluated
+each over three seeds for half the training iterations, and
+selected the value yielding the highest reward. All other
+hyperparameters followed the defaults of the original task
+environments. In rare cases (≤2%), numerical instabilities
+during tuning and in the final training runs occurred in
+both the baseline and GCR-PPO, producing abnormally low
+rewards. These runs were rerun with new random seeds when
+the z-score exceeded three standard deviations.
+The average symmetric percentage change (SPC) across
+tasks was 4.55% (Table IV), increasing to 9.5% when
+including the multi-objective tasks in Section IV-B. SPC
+is defined as SP C(a, b) = 1 b−a , and is used here
+2 (a+b)
+
+because its symmetric form avoids biasing reward increases
+over decreases compared with standard percentage change.
+However, SPC alone is limited, since most tasks are unbounded and lack explicit reward ranges. We therefore also
+consider win rates. Using paired t-tests with 95% confidence,
+GCR-PPO achieves statistically significant improvements on
+Humanoid (p = 2.4 × 10−4 ), Velocity-Rough-G1 (p =
+0.022), Repose-Cube-Allegro (p = 0.024), and TrackingLocoManip-Digit (p = 0.028). Velocity-Rough-Unitree-Go2
+shows a significant drop (p = 0.043). Variance across seeds
+is relatively high compared to mean returns. Overall, GCRPPO outperforms PPO in 10 of 13 tasks, with a Bernoulli
+test giving p = 0.046 for this win rate.
+Figure 3 shows SPC improvements plotted against average
+gradient conflict per task. Across the IsaacLab tasks, the
+Spearman rank correlation is 0.736 (p = 0.0041), indicating
+a strong monotonic association. Conflict is measured as the
+average number of objective pairs with angles greater than
+90° over all training steps and seeds. This metric directly
+quantifies the conflicts that GCR-PPO resolves and naturally
+
+TABLE I: Per-task comparison of GCR-PPO against the PPO baseline. SPC denotes Symmetric Percent Change, and Avg. conflict is the mean number of
+conflicting component pairs per run (angle > 90°) measured during GCR-PPO training, averaged over seeds.
+Baseline Reward
+µ±σ
+
+Task
+
+GCR-PPO Reward
+µ±σ
+
+64.205 ± 1.610
+0.740 ± 0.006
+0.749 ± 0.011
+9452.69 ± 205.21
+36.84 ± 0.25
+157.25 ± 4.54
+35.54 ± 0.14
+98.73 ± 1.03
+195.12 ± 10.13
+276.58 ± 27.25
+46.47 ± 1.18
+167.70 ± 6.94
+23.45 ± 3.78
+
+Quadcopter
+Reach-UR10
+Reach-Franka
+Repose-Cube-Shadow
+Velocity-Rough-Unitree-Go2
+Lift-Cube-Franka
+Velocity-Rough-H1
+Open-Drawer-Franka
+Ant
+Humanoid
+Velocity-Rough-G1
+Repose-Cube-Allegro
+Tracking-LocoManip-Digit
+
+Humanoid Experiments
+Gait 2587.9 20477.8 14062.1 28323.7 30235.7 28515.7
+Baseh 20776.4 28218.1 29393.3 26821.5 23332.7 19899.8
+Armsp 25960.5 21824.5 17573.7 24764.7 25295.5 22828.0
+None Level 1 Level 2 Level 3 Level 4 Level 5
+Factor Level
+
+Throwing Experiments
+
+SPC (%)
+
+67.126 | 66.446
+0.747 | 0.765
+0.759 | 0.766
+9759.18 | 9906.31
+37.23 | 37.35
+159.65 | 159.85
+35.71 | 36.01
+99.84 | 99.70
+208.67 | 214.48
+309.08 | 355.73
+48.50 | 50.58
+178.99 | 183.02
+29.23 | 49.97
+
+1.09
+0.13
+-0.80
+-2.36
+-1.37
+1.00
+0.06
+0.25
+1.20
+19.24
+3.47
+4.12
+34.20
+
+Avg.
+conflict
+0.15
+0.18
+0.2
+0.39
+0.45
+0.91
+1.2
+2.32
+2.49
+3.13
+3.23
+4.55
+30.71
+
+30000
+
+TABLE II: Win rates (%) of GCR-PPO over PPO across factor levels for
+Full-Body Throwing. n = configs.
+
+25000
+
+Factor
+
+Mean (Humanoid)
+
+Energy 30269.9 18052.7 14996.8 25839.0 33479.7 22668.2
+
+64.911 ± 1.583
+0.741 ± 0.016
+0.743 ± 0.013
+9230.76 ± 410.37
+36.34 ± 0.65
+158.83 ± 0.63
+35.56 ± 0.34
+98.98 ± 0.63
+197.48 ± 14.24
+329.79 ± 24.79
+48.10 ± 1.66
+174.81 ± 5.91
+33.06 ± 11.36
+
+Max Reward
+(Baseline | Ours)
+
+20000
+15000
+10000
+0.4
+
+L0
+
+L1
+
+L2
+
+L3
+
+L4
+
+NA
+
+ENERGY 70.6 (17) 80.0 (10) 90.0 (10) 100.0 (14) 84.6 (13) 54.3 (35)
+BASEH
+57.1 (14) 90.0 (10) 85.7 (7) 92.3 (13) 90.9 (11) 63.6 (44)
+BALLREL 72.7 (11) 66.7 (12) 88.2 (17) 66.7 (9) 69.2 (13) 73.0 (37)
+BODYMO 84.6 (13) 75.0 (12) 81.2 (16) 73.3 (15) 62.5 (8) 68.6 (35)
+LFTARM 76.9 (13) 58.3 (12) 72.7 (11) 66.7 (12) 80.0 (15) 77.8 (36)
+RGTARM 90.0 (10) 72.7 (11) 84.6 (13) 58.3 (12) 80.0 (10) 69.8 (43)
+
+0.120
+
+0.239
+
+0.484
+
+0.319
+
+-0.037
+
+Ballrel 0.112
+
+-0.043
+
+0.291
+
+0.065
+
+0.358
+
+0.031
+
+0.2
+
+Bodymo 0.103
+
+-0.226
+
+0.324
+
+0.299
+
+0.214
+
+0.059
+
+0.0
+
+Lftarm
+
+-0.139
+
+0.188
+
+0.305
+
+0.238
+
+0.078
+
+0.2
+
+Factor
+
+Rgtarmrel 0.327 0.304 0.066 0.071 0.272 0.024
+None Level 1 Level 2 Level 3 Level 4 Level 5
+Factor Level
+
+0.4
+
+ENERGY 100 (9) 100 (12) 100 (11) 100 (9) 100 (9) 100 (24)
+GAIT
+100 (6) 100 (13) 100 (10) 100 (6) 100 (16) 100 (23)
+BASEH 100 (12) 100 (5) 100 (8) 100 (15) 100 (8) 100 (26)
+ARMSP 100 (10) 100 (8) 100 (5) 100 (7) 100 (13) 100 (31)
+
+0.125
+
+Mean (Throwing)
+
+Energy -0.068
+
+Fig. 4: Performance difference (final reward) between GCR-PPO and
+PPO (massively GPU-distributed) on two custom multi-objective tasks:
+Humanoid Running and Full-Body Throwing. Results are averaged over
+reward ranges for each added objective to highlight the effect of task
+combinations on performance. Green indicates improvement over PPO,
+while red indicates a decrease. ”None” denotes objectives not tested in a
+given experiment.
+
+increases with the number of reward terms. However, we use
+it rather than simply counting reward components, since tasks
+with the same number of terms can exhibit very different
+levels of conflict. We do not normalise by the number
+of objectives, since doing so would downplay the added
+difficulty of resolving conflicts as the number of objectives
+increases.
+B. Custom Multi-Objective Benchmarks
+Because the IsaacLab benchmarks are strongly tailored
+to PPO through extensive tuning and reward shaping, we
+designed additional tasks to provide a more challenging
+evaluation. We selected two settings: Full-Body Throwing
+[37] and Humanoid Running [36]. We chose these because
+(i) they represent distinct whole-body control problems, and
+(ii) (ii) both occur on flat ground, which simplifies the design
+of style-based reward components. For each task, additional
+
+TABLE III: Win rates (%) of GCR-PPO over PPO across factor levels for
+Humanoid Running. n = configs.
+
+L0
+
+L1
+
+L2
+
+L3
+
+L4
+
+NA
+
+objectives were defined as threshold-based rewards: the agent
+received a fixed bonus whenever its behaviour satisfied the
+specified condition at a given time step. For example, a
+reward was granted whenever the robot’s hip remained within
+a target height range. This formulation ensured equal weighting across objectives, avoiding issues with continuous reward
+magnitudes. To increase diversity, the reward thresholds for
+each objective were partitioned into five non-overlapping
+ranges sorted in ascending order, with one range sampled
+per experiment. For each target number of objectives, 20
+random subsets were drawn, up to a maximum of four for
+Humanoid Running and six for Full-Body Throwing. This
+provided a suitable set of tasks that would test the robustness
+of each method.
+We extended the Full-Body Throwing and Humanoid
+Running tasks with additional objectives to increase
+their multi-objective complexity. For Full-Body Throwing (Throwing-MO), six were added: energy (joint power
+consumption), baseh (hip height), ballrel (timing of ball
+release), bodymo (torso velocity at release), and lftarm and
+rgtarm (hand heights at release). The implementation follows
+
+[37] using a Unitree G1 humanoid, with three additional
+penalties to regularise the policy toward realistic behaviour:
+action rate (scale −1 × 10−3 ), dof torques l2 (scale
+−2.5 × 10−6 ), and dof acc l2 (scale −2.5 × 10−8 ). For
+additional task objectives, scales are set to 1 for objectives
+rewarded once per episode and step dt for those rewarded
+at every step. For Humanoid Running (Humanoid-MO),
+four were introduced: energy (scale = 5), gait (stride length
+scaled by contact duration, scale = 250), baseh (scale
+= 5), and armsp (arm–pelvis distance, scale = 5). Each
+objective was defined through five non-overlapping ranges,
+with one range randomly selected per experiment. Agents
+received a fixed reward when their behaviour fell within the
+active range, ensuring equal weighting across objectives and
+avoiding bias from continuous shaping. Reward scales were
+set so that the reward magnitude was roughly proportional
+to the percentage of objective satisfaction, with additional
+objectives contributing at most a combined twofold increase
+over the original reward.
+
+losses, (ii) GCR-PPO-NoPriority, which treats all objectives
+equally, and (iii) GCR-PPO with task regulariser prioritisation. Results are shown in Table IV. The multi-head critic
+yields a modest 2.1% average improvement on IsaacLab
+(7/13 tasks) and a 12.04% drop on the custom tasks. GCRPPO-NoPriority improves over PPO on IsaacLab (4.8% SPC
+vs. 4.6% for GCR-PPO), but performs poorly on custom
+tasks—30.5% improvement on Humanoid Running versus
+79.7% for GCR-PPO, and a 65.0% drop on Throwing. Its
+lower variance reflects policies solving the primary task but
+failing to satisfy added objectives. Averaging across all 15
+tasks, GCR-PPO achieves the strongest overall performance.
+TABLE IV: Ablation: average improvement (SPC) by method on IsaacLab,
+custom multi-objective (MO), and overall.
+Method
+
+IsaacLab
+
+Custom (Humanoid,Throwing)
+
+Overall
+
+Multi-head PPO
+GCR-PPO-NoPriority
+GCR-PPO
+
+2.1%
+4.8%
+4.6%
+
+-12.04%
+-17.25%
+41.2%
+
+0.21%
+1.86%
+9.5%
+
+D. Training Performance
+
+Fig. 5: Conflict evolution in the Humanoid Running custom task, measured
+by cosine similarity between component gradients: left at training start, right
+at training end. With GCR-PPO, gradient conflicts decrease over training.
+
+Figure 3 shows average conflict and SPC improvement
+for the custom Humanoid Running (79.7% SPC, 4.09
+average conflicts) and Full-Body Throwing (2.6% SPC,
+1.15 average conflicts) tasks. Both lie above the IsaacLab
+trend, with Humanoid Running a strong outlier (+74.8%
+residual), likely due to the lack of reward shaping present
+in the IsaacLab benchmark. Within-task analyses found no
+significant correlation between conflict and SPC, as many
+objective ranges are mutually infeasible (e.g., minimising
+energy while maximising gait). When feasible, however,
+GCR-PPO reduces conflict over training time (Figure 5).
+Figure 4 and Tables II-III show returns and win-rates, with
+all combinations exceeding 50%. Performance depends on
+objective ranges: infeasible ones (e.g., minimal energy in
+Throwing) hurt performance, while feasible ones (e.g., moderate base height, sufficient momentum, large gait) improve
+it. Some infeasible ranges (e.g., minimal-energy Humanoid
+Running) still outperform PPO, as GCR-PPO leverages other
+objectives, whereas PPO overfits the conflicting reward.
+C. Ablations
+We evaluate three variants against PPO: (i) a multi-head
+critic baseline that computes per-term GAE and surrogate
+
+Figure 6 shows iteration time for PPO and GCR-PPO
+on the IsaacLab benchmark. Nearly all overhead in GCRPPO comes from gradient resolution (¿99%), while percomponent loss calculation is negligible. Tasks with many
+reward components (e.g., Velocity-Rough-G1, VelocityRough-H1, Tracking-LocoManip-Digit), therefore, show a
+larger slowdown, with a worst case of 54% (≈ 47 minutes extra). The projection step scales linearly with conflicting pairs,
+though the number of potential pairs grows quadratically
+with reward terms. Overall, GCR-PPO delivers consistent
+improvements in return with only a modest increase in
+training time.
+
+Fig. 6: Time per training iteration (s) on a single NVIDIA H100 GPU,
+including data collection and model updates.
+
+V. CONCLUSIONS, DISCUSSION AND FUTURE
+WORK
+We presented GCR-PPO, an on-policy method that decomposes additive rewards into per-objective advantages and
+resolves conflicts via projection with task–regulariser prioritisation. Across 13 IsaacLab tasks and two custom multiobjective benchmarks, GCR-PPO improves returns and win
+rates over PPO, with larger gains in settings exhibiting higher
+
+conflict. The method integrates easily into PPO pipelines
+with modest training-time overhead.
+Results highlight that some of the difficulty in multiobjective control stems from hidden interference between reward components. Exposing per-objective signals and applying lightweight conflict resolution improves stability without
+costly multi-objective solvers. Limitations include increased
+seed variability and added training time from the gradient
+surgery step. Our priority scheme encodes designer intent
+but does not provide Pareto guarantees.
+Future work includes: (i) analysing why and where conflicts persist; (ii) extending to multiplicative or non-linear
+rewards; (iii) improving efficiency of gradient resolution and
+with more principled gradient resolution methods; and (iv)
+developing harder, less-shaped benchmarks.
+In summary, GCR-PPO shows that explicit reward geometry and resolving conflicts inside PPO are practical
+steps toward scalable multi-objective robot learning, with
+opportunities to generalise to richer objectives and real-world
+scenarios.
+R EFERENCES
+[1] C. Tang, B. Abbatematteo, J. Hu, R. Chandra, R. Martı́n-Martı́n, and
+P. Stone, “Deep reinforcement learning for robotics: A survey of realworld successes,” in Proceedings of the AAAI Conference on Artificial
+Intelligence, vol. 39, no. 27, 2025, pp. 28 694–28 698.
+[2] A. Farooq and K. Iqbal, “A survey of reinforcement learning for optimization in automation,” in 2024 IEEE 20th International Conference
+on Automation Science and Engineering (CASE). IEEE, 2024, pp.
+2487–2494.
+[3] N. Rudin, D. Hoeller, P. Reist, and M. Hutter, “Learning to walk
+in minutes using massively parallel deep reinforcement learning,” in
+Conference on robot learning. PMLR, 2022, pp. 91–100.
+[4] J. Collins, S. Chand, A. Vanderkop, and D. Howard, “A review of
+physics simulators for robotic applications,” IEEE Access, vol. 9, pp.
+51 416–51 431, 2021.
+[5] T. Yu, D. Quillen, Z. He, R. Julian, K. Hausman, C. Finn, and
+S. Levine, “Meta-world: A benchmark and evaluation for multi-task
+and meta reinforcement learning,” in Conference on robot learning.
+PMLR, 2020, pp. 1094–1100.
+[6] T. Yu, S. Kumar, A. Gupta, S. Levine, K. Hausman, and C. Finn,
+“Gradient surgery for multi-task learning,” in Advances in Neural
+Information Processing Systems (NeurIPS), 2020.
+[7] D. M. Roijers, P. Vamplew, S. Whiteson, and R. Dazeley, “A survey
+of multi-objective sequential decision-making,” Journal of Artificial
+Intelligence Research, vol. 48, pp. 67–113, 2013.
+[8] P. Althaus and H. I. Christensen, “Behavior coordination in structured
+environments,” Advanced Robotics, vol. 17, no. 7, pp. 657–674, 2003.
+[9] P. Pirjanian, “Multiple objective behavior-based control,” Robotics and
+Autonomous Systems, vol. 31, no. 1-2, pp. 53–60, 2000.
+[10] S. Gu, B. Sel, Y. Ding, L. Wang, Q. Lin, A. Knoll, and M. Jin,
+“Safe and balanced: A framework for constrained multi-objective
+reinforcement learning,” IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 2025.
+[11] S. Huang, A. Abdolmaleki, G. Vezzani, P. Brakel, D. J. Mankowitz,
+M. Neunert, S. Bohez, Y. Tassa, N. Heess, M. Riedmiller et al.,
+“A constrained multi-objective reinforcement learning framework,” in
+Conference on Robot Learning. PMLR, 2022, pp. 883–893.
+[12] B. Siciliano, L. Sciavicco, L. Villani, and G. Oriolo, Robotics: Modelling, planning and control. Springer, 2009.
+[13] O. Khatib, “A unified approach for motion and force control of robot
+manipulators: The operational space formulation,” IEEE Journal on
+Robotics and Automation, vol. 3, no. 1, pp. 43–53, 1987.
+[14] J. Kober, J. A. Bagnell, and J. Peters, “Reinforcement learning in
+robotics: A survey,” The International Journal of Robotics Research,
+vol. 32, no. 11, pp. 1238–1274, 2013.
+
+[15] S. Guangyuan, Q. Li, W. Zhang, J. Chen, and X.-M. Wu, “Recon: Reducing conflicting gradients from the root for multi-task learning,” in
+The Eleventh International Conference on Learning Representations,
+2023.
+[16] E. Yang, L. Shen, Z. Wang, G. Guo, X. Chen, X. Wang, and D. Tao,
+“Representation surgery for multi-task model merging,” in Proceedings of the 41st International Conference on Machine Learning, 2024,
+pp. 56 332–56 356.
+[17] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
+“Proximal policy optimization algorithms,” in arXiv preprint
+arXiv:1707.06347, 2017.
+[18] J. Schulman, P. Moritz, S. Levine, M. I. Jordan, and P. Abbeel,
+“High-dimensional continuous control using generalized advantage
+estimation,” in International Conference on Learning Representations
+(ICLR), 2016.
+[19] M. Hessel, H. Soyer, L. Espeholt, W. M. Czarnecki, S. Schmitt, and
+H. van Hasselt, “Multi-task deep reinforcement learning with popart,”
+in AAAI Conference on Artificial Intelligence, 2019.
+[20] M. Jaderberg, V. Mnih, W. M. Czarnecki, T. Schaul, J. Z. Leibo,
+D. Silver, and K. Kavukcuoglu, “Reinforcement learning with unsupervised auxiliary tasks,” in International Conference on Learning
+Representations (ICLR), 2017.
+[21] L. Espeholt, H. Soyer, R. Munos, K. Simonyan, V. Mnih, T. Ward,
+Y. Doron, V. Firoiu, T. Harley, I. Dunning, S. Legg, and
+K. Kavukcuoglu, “Impala: Scalable distributed deep-rl with importance weighted actor-learner architectures,” in International Conference on Machine Learning (ICML), 2018, pp. 1406–1415.
+[22] A. Y. Ng, D. Harada, and S. Russell, “Policy invariance under reward
+transformations: Theory and application to reward shaping,” in Icml,
+vol. 99. Citeseer, 1999, pp. 278–287.
+[23] P. Vamplew, R. Dazeley, A. Berry, R. Issabekov, and E. Dekker, “Empirical evaluation methods for multiobjective reinforcement learning
+algorithms,” Machine learning, vol. 84, no. 1, pp. 51–80, 2011.
+[24] J.-A. Desideri, “Multiple-gradient descent algorithm (mgda) for multiobjective optimization,” in International Conference on Optimization,
+2012, pp. 1–6.
+[25] K. Van Moffaert and A. Nowé, “Multi-objective reinforcement learning using sets of pareto dominating policies,” The Journal of Machine
+Learning Research, vol. 15, no. 1, pp. 3483–3512, 2014.
+[26] H. Mossalam, Y. M. Assael, D. M. Roijers, and S. Whiteson, “Multi-objective deep reinforcement learning,” arXiv preprint
+arXiv:1610.02707, 2016.
+[27] N. Vithayathil Varghese and Q. H. Mahmoud, “A survey of multi-task
+deep reinforcement learning,” Electronics, vol. 9, no. 9, p. 1363, 2020.
+[28] S. Liu, E. Johns, and A. J. Davison, “Conflict-averse gradient descent
+for multi-task learning,” in Advances in Neural Information Processing
+Systems (NeurIPS), 2021.
+[29] P. Vamplew, C. Foale, and R. Dazeley, “Value function interference and
+greedy action selection in value-based multi-objective reinforcement
+learning,” arXiv preprint arXiv:2402.06266, 2024.
+[30] C. Dann, Y. Mansour, and M. Mohri, “Reinforcement learning can be
+more efficient with multiple rewards,” in International Conference on
+Machine Learning. PMLR, 2023, pp. 6948–6967.
+[31] D. Kim, M. Hong, J. Park, and S. Oh, “Conflict-averse gradient
+aggregation for constrained multi-objective reinforcement learning,”
+arXiv preprint arXiv:2403.00282, 2024.
+[32] J. Schulman, P. Moritz, S. Levine, M. Jordan, and P. Abbeel, “Highdimensional continuous control using generalized advantage estimation,” arXiv preprint arXiv:1506.02438, 2015.
+[33] A. Raffin, A. Hill, A. Gleave, A. Kanervisto, M. Ernestus, and
+N. Dormann, “Stable-baselines3: Reliable reinforcement learning implementations,” Journal of machine learning research, vol. 22, no.
+268, pp. 1–8, 2021.
+[34] C. Schwarke, M. Mittal, and the Legged Robotics Team, “Rsl rl
+library,” https://github.com/leggedrobotics/rsl rl, 2025, version 3.0.1,
+PyPI package ‘rsl-rl-lib‘.
+[35] A. Serrano-Munoz, D. Chrysostomou, S. Bøgh, and N. AranaArexolaleiba, “skrl: Modular and flexible library for reinforcement
+learning,” Journal of Machine Learning Research, vol. 24, no. 254,
+pp. 1–9, 2023.
+[36] NVIDIA Isaac Lab Project Developers, “Isaac lab documentation,”
+https://isaac-sim.github.io/IsaacLab/, 2025, accessed: Sep. 15, 2025.
+[37] H. Munn, B. Tidd, P. Böhm, M. Gallagher, and D. Howard, “Wholebody dynamic throwing with legged manipulators,” arXiv preprint
+arXiv:2410.05681, 2024.
+
+

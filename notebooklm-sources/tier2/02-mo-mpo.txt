@@ -1,0 +1,2814 @@
+A Distributional View on Multi-Objective Policy Optimization
+
+Abbas Abdolmaleki * 1 Sandy H. Huang * 1 Leonard Hasenclever 1 Michael Neunert 1 H. Francis Song 1
+Martina Zambelli 1 Murilo F. Martins 1 Nicolas Heess 1 Raia Hadsell 1 Martin Riedmiller 1
+
+arXiv:2005.07513v1 [cs.LG] 15 May 2020
+
+Abstract
+Many real-world problems require trading off multiple competing objectives. However, these objectives are often in different units and/or scales,
+which can make it challenging for practitioners to
+express numerical preferences over objectives in
+their native units. In this paper we propose a novel
+algorithm for multi-objective reinforcement learning that enables setting desired preferences for
+objectives in a scale-invariant way. We propose
+to learn an action distribution for each objective,
+and we use supervised learning to fit a parametric
+policy to a combination of these distributions. We
+demonstrate the effectiveness of our approach on
+challenging high-dimensional real and simulated
+robotics tasks, and show that setting different preferences in our framework allows us to trace out
+the space of nondominated solutions.
+
+1. Introduction
+Reinforcement learning (RL) algorithms do an excellent
+job at training policies to optimize a single scalar reward
+function. Recent advances in deep RL have made it possible to train policies that exceed human-level performance
+on Atari (Mnih et al., 2015) and Go (Silver et al., 2016),
+perform complex robotic manipulation tasks (Zeng et al.,
+2019), learn agile locomotion (Tan et al., 2018), and even
+obtain reward in unanticipated ways (Amodei et al., 2016).
+However, many real-world tasks involve multiple, possibly
+competing, objectives. For instance, choosing a financial
+portfolio requires trading off between risk and return; controlling energy systems requires trading off performance
+and cost; and autonomous cars must trade off fuel costs, efficiency, and safety. Multi-objective reinforcement learning
+(MORL) algorithms aim to tackle such problems (Roijers
+et al., 2013; Liu et al., 2015). A common approach is scalarization: based on preferences across objectives, transform
+the multi-objective reward vector into a single scalar re*
+
+Equal contribution 1 DeepMind. Correspondence to: Abbas
+Abdolmaleki <aabdolmaleki@google.com>, Sandy H. Huang
+<shhuang@google.com>.
+
+Figure 1. We demonstrate our approach in four complex continuous control domains, in simulation and in the real world. Videos
+are at http://sites.google.com/view/mo-mpo.
+
+ward (e.g., by taking a convex combination), and then use
+standard RL to optimize this scalar reward.
+It is tricky, though, for practitioners to pick the appropriate
+scalarization for a desired preference across objectives, because often objectives are defined in different units and/or
+scales. For instance, suppose we want an agent to complete a task while minimizing energy usage and mechanical wear-and-tear. Task completion may correspond to a
+sparse reward or to the number of square feet a vacuuming
+robot has cleaned, and reducing energy usage and mechanical wear-and-tear could be enforced by penalties on power
+consumption (in kWh) and actuator efforts (in N or Nm),
+respectively. Practitioners would need to resort to using
+trial and error to select a scalarization that ensures the agent
+prioritizes actually doing the task (and thus being useful)
+over saving energy.
+Motivated by this, we propose a scale-invariant approach for
+encoding preferences, derived from the RL-as-inference perspective. Instead of choosing a scalarization, practitioners
+set a constraint per objective. Based on these constraints, we
+learn an action distribution per objective that improves on
+the current policy. Then, to obtain a single updated policy
+that makes these trade-offs, we use supervised learning to
+fit a policy to the combination of these action distributions.
+The constraints control the influence of each objective on
+the policy, by constraining the KL-divergence between each
+objective-specific distribution and the current policy. The
+higher the constraint value, the more influence the objective has. Thus, a desired preference over objectives can be
+encoded as the relative magnitude of these constraint values.
+Fundamentally, scalarization combines objectives in reward
+space, whereas our approach combines objectives in distri-
+
+A Distributional View on Multi-Objective Policy Optimization
+
+bution space, thus making it invariant to the scale of rewards.
+In principle, our approach can be combined with any RL
+algorithm, regardless of whether it is off-policy or on-policy.
+We combine it with maximum a posteriori policy optimization (MPO) (Abdolmaleki et al., 2018a;b), an off-policy
+actor-critic RL algorithm, and V-MPO (Song et al., 2020),
+an on-policy variant of MPO. We call these two algorithms
+multi-objective MPO (MO-MPO) and multi-objective VMPO (MO-V-MPO), respectively.
+Our main contribution is providing a distributional view on
+MORL, which enables scale-invariant encoding of preferences. We show that this is a theoretically-grounded approach, that arises from taking an RL-as-inference perspective of MORL. Empirically, we analyze the mechanics of
+MO-MPO and show it finds all Pareto-optimal policies in a
+popular MORL benchmark task. Finally, we demonstrate
+that MO-MPO and MO-V-MPO outperform scalarized approaches on multi-objective tasks across several challenging
+high-dimensional continuous control domains (Fig. 1).
+
+2. Related Work
+2.1. Multi-Objective Reinforcement Learning
+Multi-objective reinforcement learning (MORL) algorithms
+are either single-policy or multiple-policy (Vamplew et al.,
+2011). Single-policy approaches seek to find the optimal
+policy for a given scalarization of the multi-objective problem. Often this scalarization is linear, but other choices have
+also been explored (Van Moffaert et al., 2013).
+However, the scalarization may be unknown at training time,
+or it may change over time. Multiple-policy approaches
+handle this by finding a set of policies that approximates
+the true Pareto front. Some approaches repeatedly call a
+single-policy MORL algorithm with strategically-chosen
+scalarizations (Natarajan & Tadepalli, 2005; Roijers et al.,
+2014; Mossalam et al., 2016; Zuluaga et al., 2016). Other
+approaches learn a set of policies simultaneously, by using a
+multi-objective variant of the Q-learning update rule (Barrett
+& Narayanan, 2008; Moffaert & Nowé, 2014; Reymond &
+Nowé, 2019; Yang et al., 2019) or by modifying gradientbased policy search (Parisi et al., 2014; Pirotta et al., 2015).
+Most existing approaches for finding the Pareto front are
+limited to discrete state and action spaces, in which tabular
+algorithms are sufficient. Although recent work combining
+MORL with deep RL handles high-dimensional observations, this is in domains with low-dimensional and usually
+discrete action spaces (Mossalam et al., 2016; van Seijen
+et al., 2017; Friedman & Fontaine, 2018; Abels et al., 2019;
+Reymond & Nowé, 2019; Yang et al., 2019; Nottingham
+et al., 2019). In contrast, we evaluate our approach on con-
+
+tinuous control tasks with more than 20 action dimensions.1
+A couple of recent works have applied deep MORL to find
+the Pareto front in continuous control tasks; these works
+assume scalarization and rely on additionally learning either a meta-policy (Chen et al., 2019) or inter-objective
+relationships (Zhan & Cao, 2019). We take an orthogonal
+approach to existing approaches: one encodes preferences
+via constraints on the influence of each objective on the
+policy update, instead of via scalarization. MO-MPO can
+be run multiple times, with different constraint settings, to
+find a Pareto front of policies.
+2.2. Constrained Reinforcement Learning
+An alternate way of setting preferences is to enforce that
+policies meet certain constraints. For instance, threshold
+lexicographic ordering approaches optimize a (single) objective while meeting specified threshold values on the other
+objectives (Gábor et al., 1998), optionally with slack (Wray
+et al., 2015). Similarly, safe RL is concerned with learning
+policies that optimize a scalar reward while not violating
+safety constraints (Achiam et al., 2017; Chow et al., 2018);
+this has also been studied in the off-policy batch RL setting
+(Le et al., 2019). Related work minimizes costs while ensuring the policy meets a constraint on the minimum expected
+return (Bohez et al., 2019), but this requires that the desired
+or achievable reward is known a priori. In contrast, MOMPO does not require knowledge of the scale of rewards.
+In fact, often there is no easy way to specify constraints on
+objectives, e.g., it is difficult to figure out a priori how much
+actuator effort a robot will need to use to perform a task.
+2.3. Multi-Task Reinforcement Learning
+Multi-task reinforcement learning can also be cast as a
+MORL problem. Generally these algorithms learn a separate
+policy for each task, with shared learning across tasks (Teh
+et al., 2017; Riedmiller et al., 2018; Wulfmeier et al., 2019).
+In particular, Distral (Teh et al., 2017) learns a shared prior
+that regularizes the per-task policies to be similar to each
+other, and thus captures essential structure that is shared
+across tasks. MO-MPO differs in that the goal is to learn a
+single policy that must trade off across different objectives.
+Other multi-task RL algorithms seek to train a single agent
+to solve different tasks, and thus need to handle different
+reward scales across tasks. Prior work uses adaptive normalization for the targets in value-based RL, so that the agent
+1
+MORL for continuous control tasks is difficult because the
+policy can no longer output arbitrary action distributions, which
+limits how well it can compromise between competing objectives.
+In state-of-the-art RL algorithms for continuous control, policies
+typically output a single action (e.g., D4PG (Barth-Maron et al.,
+2018)) or a Gaussian (e.g., PPO (Schulman et al., 2017), MPO
+(Abdolmaleki et al., 2018b), and SAC (Haarnoja et al., 2018)).
+
+A Distributional View on Multi-Objective Policy Optimization
+
+cares equally about all tasks (van Hasselt et al., 2016; Hessel
+et al., 2019). Similarly, prior work in multi-objective optimization has dealt with objectives of different units and/or
+scales by normalizing objectives to have similar magnitudes
+(Marler & Arora, 2005; Grodzevich & Romanko, 2006; Kim
+& de Weck, 2006; Daneshmand et al., 2017; Ishibuchi et al.,
+2017). MO-MPO can also be seen as doing adaptive normalization, but for any preference over objectives, not just
+equal preferences.
+In general, invariance to reparameterization of the function
+approximator has been investigated in optimization literature resulting in, for example, natural gradient methods
+(Martens, 2014). The common tool here is measuring distances in function space instead of parameter space, using
+KL-divergence. Similarly in this work, to achieve invariance to the scale of objectives, we use KL-divergence over
+policies to encode preferences.
+
+3. Background and Notation
+Multi Objective Markov Decision Process. In this paper, we consider a multi-objective RL problem defined by a
+multi-objective Markov Decision Process (MO-MDP). The
+MO-MDP consists of states s ∈ S and actions a ∈ A,
+an initial state distribution p(s0 ), transition probabilities
+p(st+1 |st , at ) which define the probability of changing
+from state st to st+1 when taking action at , reward functions {rk (s, a) ∈ R}N
+k=1 per objective k, and a discount
+factor γ ∈ [0, 1). We define our policy πθ (a|s) as a
+state conditional distribution over actions parametrized by
+θ. Together with the transition probabilities, this gives
+rise to a state visitation distribution µ(s). We also consider per-objective action-value functions. The actionvalue function for objective k is defined as the expected
+return (i.e., cumulative discounted reward) from choosing
+action a in state s for objective
+k and then following polP∞
+icy π: Qπk (s, a) = Eπ [ t=0 γ t rk (st , at )|s0 = s, a0 = a].
+We can represent this function using
+the recursive expres
+
+sion Qπk (st , at ) = Ep(st+1 |st ,at ) rk (st , at ) + γVkπ (st+1 ) ,
+where Vkπ (s) = Eπ [Qπk (s, a)] is the value function of π for
+objective k.
+Problem Statement. For any MO-MDP there is a set
+of nondominated policies, i.e., the Pareto front. A policy
+is nondominated if there is no other policy that improves
+its expected return for an objective without reducing the
+expected return of at least one other objective. Given a
+preference setting, our goal is to find a nondominated policy
+πθ that satisfies those preferences. In our approach, a setting
+of constraints does not directly correspond to a particular
+scalarization, but we show that by varying these constraint
+settings, we can indeed trace out a Pareto front of policies.
+
+Algorithm 1 MO-MPO: One policy improvement step
+1: given batch size (L), number of actions to sample (M ), (N )
+π
+N
+Q-functions {Qk old (s, a)}N
+k=1 , preferences {k }k=1 , previous
+N
+policy πold , previous temperatures {ηk }k=1 , replay buffer D,
+first-order gradient-based optimizer O
+2:
+3: initialize πθ from the parameters of πold
+4: repeat
+L,M,N
+5: // Collect dataset {si , aij , Qij
+, where
+k }i,j,k
+π
+ij
+ij
+i
+6: // M actions a ∼ πold (a|s ) and Qk = Qk old (si , aij )
+7:
+8: // Compute action distribution for each objective
+9: for k = 1, . . . , N do
+
+ ij 
+PM 1
+P 1
+Qk
+log
+exp
+10:
+δηk ← ∇ηk ηk k + ηk L
+j M
+i L
+ηk
+11:
+
+Update ηk based on δηk , using optimizer O
+ij
+
+Q
+
+12:
+qkij ∝ exp( ηkk )
+13:
+end for
+14:
+15:
+// Update parametric
+policy
+P PM P
+N ij
+ij i
+16:
+δπ ← −∇θ L
+i
+j
+k qk log πθ (a |s )
+17:
+(subject to additional KL regularization, see Sec. 4.2.2)
+18:
+Update πθ based on δπ , using optimizer O
+19:
+20: until fixed number of steps
+21: return πold = πθ
+
+4. Method
+We propose a policy iteration algorithm for multi-objective
+RL. Policy iteration algorithms decompose the RL problem
+into two sub-problems and iterate until convergence:
+1. Policy evaluation: estimate Q-functions given policy
+2. Policy improvement: update policy given Q-functions
+Algorithm 1 summarizes this two-step multi-objective policy improvement procedure. In Appendix E, we explain how
+this can be derived from the “RL as inference” perspective.
+We describe multi-objective MPO in this section and explain
+multi-objective V-MPO in Appendix D. When there is only
+one objective, MO-(V-)MPO reduces to (V-)MPO.
+4.1. Multi-Objective Policy Evaluation
+In this step we learn Q-functions to evaluate the previous
+policy πold . We train a separate Q-function per objective,
+following the Q-decomposition approach (Russell & Zimdars, 2003). In principle, any Q-learning algorithm can be
+used, as long as the target Q-value is computed with respect
+to πold .2 In this paper, we use the Retrace objective (Munos
+2
+Russell & Zimdars (2003) prove critics suffer from “illusion of
+control” if they are trained with conventional Q-learning (Watkins,
+1989). In other words, if each critic computes its target Q-value
+based on its own best action for the next state, then they overestimate Q-values, because in reality the parametric policy πθ (that
+considers all critics’ opinions) is in charge of choosing actions.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+et al., 2016) to learn a Q-function Qπk old (s, a; φk ) for each
+objective k, parameterized by φk , as follows:
+min
+
+{φk }N
+1
+
+N
+X
+
+h
+E(s,a)∼D
+
+k=1
+
+i
+πold
+2
+Q̂ret
+k (s, a) − Qk (s, a; φk )) ,
+
+where Q̂ret
+k is the Retrace target for objective k and the
+previous policy πold , and D is a replay buffer containing
+gathered transitions. See Appendix C for details.
+4.2. Multi-Objective Policy Improvement
+Given the previous policy πold (a|s) and associated Qfunctions {Qπk old (s, a)}N
+k=1 , our goal is to improve the previous policy for a given visitation distribution µ(s).3 To this
+end, we learn an action distribution for each Q-function and
+combine these to obtain the next policy πnew (a|s). This is a
+multi-objective variant of the two-step policy improvement
+procedure employed by MPO (Abdolmaleki et al., 2018b).
+In the first step, for each objective k we learn an improved
+action distribution qk (a|s) such that Eqk (a|s) [Qπk old (s, a)] ≥
+Eπold (a|s) [Qπk old (s, a)], where states s are drawn from a visitation distribution µ(s).
+In the second step, we combine and distill the improved
+distributions qk into a new parametric policy πnew (with
+parameters θnew ) by minimizing the KL-divergence between
+the distributions and the new parametric policy, i.e,
+θnew = argmin
+θ
+
+N
+X
+
+h 
+i
+Eµ(s) KL qk (a|s)kπθ (a|s) . (1)
+
+k=1
+
+This is a supervised learning loss that performs maximum
+likelihood estimate of distributions qk . Next, we will explain
+these two steps in more detail.
+4.2.1. O BTAINING ACTION DISTRIBUTIONS PER
+OBJECTIVE (S TEP 1)
+To obtain the per-objective improved action distributions
+qk (a|s), we optimize the standard RL objective for each
+objective Qk :
+Z
+Z
+max µ(s) qk (a|s) Qk (s, a) da ds
+(2)
+qk
+s
+a
+Z
+s.t. µ(s) KL(qk (a|s)kπold (a|s)) ds < k ,
+s
+
+where k denotes the allowed expected KL divergence for
+objective k. We use these k to encode preferences over objectives. More concretely, k defines the allowed influence
+of objective k on the change of the policy.
+3
+In practice, we use draws from the replay buffer to estimate
+expectations over the visitation distribution µ(s).
+
+For nonparametric action distributions qk (a|s), we can solve
+this constrained optimization problem in closed form for
+each state s sampled from µ(s) (Abdolmaleki et al., 2018b),
+ Q (s, a) 
+k
+qk (a|s) ∝ πold (a|s) exp
+,
+(3)
+ηk
+where the temperature ηk is computed based on the corresponding k , by solving the following convex dual function:
+ηk = argmin η k +
+(4)
+η
+Z
+Z
+ Q (s, a) 
+k
+da ds .
+η µ(s) log πold (a|s) exp
+η
+s
+a
+In order to evaluate qk (a|s) and the integrals in (4), we draw
+L states from the replay buffer and, for each state, sample
+M actions from the current policy πold . In practice, we
+maintain one temperature parameter ηk per objective. We
+found that optimizing the dual function by performing a few
+steps of gradient descent on ηk is effective, and we initialize
+with the solution found in the previous policy iteration step.
+Since ηk should be positive, we use a projection operator
+after each gradient step to maintain ηk > 0. Please refer to
+Appendix C for derivation details.
+Application to Other Deep RL Algorithms. Since the
+constraints k in (2) encode the preferences over objectives,
+solving this optimization problem with good satisfaction
+of constraints is key for learning a policy that satisfies the
+desired preferences. For nonparametric action distributions
+qk (a|s), we can satisfy these constraints exactly. One could
+use any policy gradient method (e.g. Schulman et al., 2015;
+2017; Heess et al., 2015; Haarnoja et al., 2018) to obtain
+qk (a|s) in a parametric form instead. However, solving the
+constrained optimization for parametric qk (a|s) is not exact,
+and the constraints may not be well satisfied, which impedes
+the use of k to encode preferences. Moreover, assuming a
+parametric qk (a|s) requires maintaining a function approximator (e.g., a neural network) per objective, which can
+significantly increase the complexity of the algorithm and
+limits scalability.
+Choosing k . It is more intuitive to encode preferences via
+k rather than via scalarization weights, because the former
+is invariant to the scale of rewards. In other words, having a
+desired preference across objectives narrows down the range
+of reasonable choices for k , but does not narrow down the
+range of reasonable choices for scalarization weights. In
+order to identify reasonable scalarization weights, a RL practitioner needs to additionally be familiar with the scale of
+rewards for each objective. In practice, we have found that
+learning performance is robust to a wide range of scales for
+k . It is the relative scales of the k that matter for encoding
+preferences over objectives—the larger a particular k is
+with respect to others, the more that objective k is preferred.
+On the other hand, if k = 0, then objective k will have
+
+A Distributional View on Multi-Objective Policy Optimization
+
+no influence and will effectively be ignored. In Appendix
+A.1, we provide suggestions for setting k , given a desired
+preference over objectives.
+4.2.2. F ITTING A NEW PARAMETRIC POLICY (S TEP 2)
+In the previous section, for each objective k, we have obtained an improved action distribution qk (a|s). Next, we
+want to combine these distributions to obtain a single parametric policy that trades off the objectives according to
+the constraints k that we set. For this, we solve a supervised learning problem that fits a parametric policy to the
+per-objective action distributions from step 1,
+Z
+N Z
+X
+θnew = argmax
+µ(s) qk (a|s) log πθ (a|s) da ds
+θ
+
+Z
+s.t.
+s
+
+k=1
+
+s
+
+a
+
+µ(s) KL(πold (a|s) k πθ (a|s)) ds < β , (5)
+
+where θ are the parameters of our policy (a neural network)
+and the KL constraint enforces a trust region of size β that
+limits the overall change in the parametric policy. The KL
+constraint in this step has a regularization effect that prevents the policy from overfitting to the sample-based action
+distributions, and therefore avoids premature convergence
+and improves stability of learning (Schulman et al., 2015;
+Abdolmaleki et al., 2018a;b).
+Similar to the first policy improvement step, we evaluate
+the integrals by using the L states sampled from the replay
+buffer and the M actions per state sampled from the old
+policy. In order to optimize (5) using gradient descent, we
+employ Lagrangian relaxation, similar to in MPO (Abdolmaleki et al., 2018a) (see Appendix C for more detail).
+
+5. Experiments: Toy Domains
+In the empirical evaluation that follows, we will first demonstrate the mechanics and scale-invariance of MO-MPO in
+a single-state environment (Sec. 5.1), and then show that
+MO-MPO can find all Pareto-dominant policies in a popular
+MORL benchmark (Sec. 5.2). Finally, we show the benefit
+of using MO-MPO in high-dimensional continuous control
+domains, including on a real robot (Sec. 6). Appendices
+A and B contain a detailed description of all domains and
+tasks, experimental setups, and implementation details.
+Baselines. The goal of our empirical evaluation is to
+analyze the benefit of using our proposed multi-objective
+policy improvement step (Sec. 4.2.2), that encodes preferences over objectives via constraints k on expected KLdivergences, rather than via weights wk . Thus, we primarily
+compare MO-MPO against scalarized MPO, which relies
+on linear scalarization weights wk to encode preferences.
+The only difference between MO-MPO and scalarized MPO
+is the policy improvement step: for scalarized MPO, a single
+
+Figure 2. A simple environment in which the agent starts at state
+S0 , and chooses to navigate to one of three terminal states. There
+are two objectives. Taking the left action, for instance, leads to
+a reward of 1 for the first objective and 4 for the second.
+
+improved
+action distribution q(a|s) is computed, based on
+P
+w
+Q
+(s, a) and a single KL constraint .
+k
+k
+k
+State-of-the-art approaches that combine MORL with deep
+RL assume linear scalarization as well, either learning a
+separate policy for each setting of weights (Mossalam et al.,
+2016) or learning a single policy conditioned on scalarization weights (Friedman & Fontaine, 2018; Abels et al.,
+2019). Scalarized MPO addresses the former problem,
+which is easier. The policy evaluation step in scalarized
+MPO is analagous to scalarized Q-learning, proposed by
+Mossalam et al. (2016). As we show later in Sec. 6, even
+learning an optimal policy for a single scalarization is difficult in high-dimensional continuous control domains.
+5.1. Simple World
+First, we will examine the behavior of MO-MPO in a simple
+multi-armed bandit with three actions (up, right, and
+left) (Fig. 2), inspired by Russell & Zimdars (2003).
+We train policies with scalarized MPO and with MO-MPO.
+The policy evaluation step is exact because the Q-value
+function for each objective is known: it is equal to the
+reward received for that objective after taking each action,
+as labeled in Fig. 2.4
+We consider three possible desired preferences: equal preference for the two objectives, preferring the first, and preferring the second. Encoding preferences in scalarized
+MPO amounts to choosing appropriate linear scalarization
+weights, and in MO-MPO amounts to choosing appropriate
+’s. We use the following weights and ’s:
+• equal preference: weights [0.5, 0.5] or ’s [0.01, 0.01]
+• prefer first: weights [0.9, 0.1] or ’s [0.01, 0.002]
+• prefer second: weights [0.1, 0.9] or ’s [0.002, 0.01]
+We set  = 0.01 for scalarized MPO. If we start with a
+4
+The policy improvement step can also be computed exactly,
+because solving for the optimal temperature η (or η1 and η2 in the
+MO-MPO case) is a convex optimization problem, and the KLconstrained policy update is also a convex optimization problem
+when there is only one possible state. We use CVXOPT (Andersen
+et al., 2020) as our convex optimization solver.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+The scale of k controls the amount that objective k can
+influence the policy’s update. If we set 1 = 0.01 and sweep
+over the range from 0 to 0.01 for 2 , the resulting policies go
+from always picking right, to splitting probability across
+right and up, to always picking up (Fig. 4, right). In
+contrast, setting weights leads to policies quickly converging
+to placing all probability on a single action (Fig. 4, left).
+We hypothesize this limits the ability of scalarized MPO
+to explore and find compromise policies (that perform well
+with respect to all objectives) in more challenging domains.
+5.2. Deep Sea Treasure
+An important quality of any MORL approach is the ability
+to find a variety of policies on the true Pareto front (Roijers
+et al., 2013). We demonstrate this in Deep Sea Treasure
+(DST) (Vamplew et al., 2011), a popular benchmark for testing MORL approaches. DST consists of a 11×10 grid world
+with ten treasure locations. The agent starts in the upper left
+corner (s0 = (0, 0)) and has a choice of four actions (moving one square up, right, down, and left). When the
+agent picks up a treasure, the episode terminates. The agent
+has two objectives: treasure value and time penalty. The
+time penalty is −1 for each time step that the agent takes,
+and farther-away treasures have higher treasure values. We
+use the treasure values in Yang et al. (2019).
+We ran scalarized MPO with weightings [w, 1 − w] and
+
+prefer first
+
+prefer second
+
+0.5
+0.0
+1.0
+0.5
+0.0
+
+left
+
+up
+
+right
+
+left
+
+scalarized
+distributional
+
+up
+
+right
+
+left
+
+up
+
+right
+
+scalarized, imbalanced rewards
+distributional, imbalanced rewards
+
+Figure 3. When two objectives have comparable reward scales
+(solid bars), scalarized MPO (first row) and MO-MPO (second row)
+learn similar policies, across three different preferences. However,
+when the scale of the first objective is much higher (striped bars),
+scalarized MPO shifts to always preferring the first objective. In
+contrast, MO-MPO is scale-invariant and still learns policies that
+satisfy the preferences. The y-axis denotes action probability.
+
+scalarized
+
+1
+
+1
+
+scalarized
+
+[1,0]
+[1,0]
+
+[.5,.5]
+[.5,.5]
+0
+
+distributional
+scalarized [𝜖1, 𝜖2]
+[1,0]
+1 1 distributional [.01,0]
+[.01,0]
+
+[w1, w2]
+
+[0,1]
+0 0.0 0.5 1.0 [0,1]
+0.0 0.5
+1.0
+p(left)
+p(left)
+
+p(right)
+
+Even in this simple environment, we see that MO-MPO’s
+scale-invariant way of encoding preferences is valuable. In
+more complex domains, in which the Q-value functions
+must be learned in parallel with the policy, the (automatic)
+dynamic adjustment of temperatures ηk per objective becomes more essential (Sec. 6).
+
+equal preference
+
+p(right)
+
+However, if we make the rewards imbalanced by multiplying the rewards obtained for the first objective by 20 (e.g.,
+left now obtains a reward of [20, 4]), we see that the policies learned by scalarized MPO shift to preferring the optimal action for the first objective (right) in both the equal
+preference and prefer second cases (Fig. 3, striped bars).
+In contrast, the final policies for MO-MPO are the same as
+for balanced rewards, because in each policy improvement
+step, MO-MPO optimizes for a separate temperature ηk that
+scales each objective’s Q-value function. This ηk is computed based on the corresponding allowed KL-divergence
+k , so when the rewards for any objective k are multiplied
+by a factor but k remains the same, the computed ηk ends
+up being scaled by that factor as well, neutralizing the effect
+of the scaling of rewards (see Eq. (4)).
+
+1.0
+
+p(right)
+
+uniform policy and run MPO with β = 0.001 until the
+policy converges, scalarized MPO and MO-MPO result in
+similar policies (Fig. 3, solid bars): up for equal preference,
+right for prefer first, and left for prefer second.
+
+[.01,.01]
+[.01,.01]
+[.5,.5]
+0
+
+[0,.01]
+0 0.0 0.5 1.0 [0,.01]
+[0,1]
+0.0 0.5
+1.0
+p(left)
+p(left)
+
+Figure 4. A visualization of policies during learning—each curve
+corresponds to a particular setting of weights (left) or ’s (right).
+Policies are initialized as uniform (the blue dot), and are trained
+until convergence. Each point (x, y) corresponds to the policy
+with p(left) = x, p(right) = y, and p(up) = 1 − x − y. The
+top left and bottom right blue stars denote the optimal policy for
+the first and second objectives, respectively.
+
+w ∈ [0, 0.01, 0.02, . . . , 1]. All policies converged to a point
+on the true Pareto front, and all but three found the optimal
+policy for that weighting. In terms of coverage, policies
+were found for eight out of ten points on the Pareto front.5
+We ran MO-MPO on this task as well, for a range of :
+time ∈ [0.01, 0.02, 0.05] and treasure = c ∗ time , where
+c ∈ [0.5, 0.51, 0.52, . . . , 1.5]. All runs converged to a policy
+on the true Pareto front, and MO-MPO finds policies for all
+ten points on the front (Fig. 5, left). Note that it is the ratio
+of ’s that matters, rather than the exact settings—across
+all settings of time , similar ratios of treasure to time result
+in similar policies; as this ratio increases, policies tend to
+prefer higher-value treasures (Fig. 5, right).
+5
+
+Since scalarized MPO consistently finds the optimal policy
+for any given weighting in this task, with a more strategic selection
+of weights, we expect policies for all ten points would be found.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+fingers and 24 degrees of freedom, actuated by 20 motors.
+The observation consists of joint angles, joint velocities,
+and touch sensors, for a total of 63 dimensions. The touch
+and turn tasks terminate when the goal is reached or after 5
+seconds, and the orient task terminates after 10 seconds.
+
+Figure 5. Left: Blue stars mark the true Pareto front for Deep Sea
+Treasure. MO-MPO, with a variety of settings for k , discovers
+all points on the true Pareto front. The area of the orange circles
+is proportional to the number of k settings that converged to
+that point. Right: As more preference is given to the treasure
+objective (i.e., as x increases), policies tend to prefer higher-value
+treasures. Each orange dot in the scatterplot corresponds to a
+particular setting of k .
+
+6. Experiments: Continuous Control Domains
+The advantage of encoding preferences via ’s, rather than
+via weights, is apparent in more complex domains. We compared our approaches, MO-MPO and MO-V-MPO, against
+scalarized MPO and V-MPO in four high-dimensional continuous control domains, in MuJoCo (Todorov et al., 2012)
+and on a real robot. The domains we consider are:
+Humanoid: We use the humanoid run task defined in DeepMind Control Suite (Tassa et al., 2018). Policies must optimize for horizontal speed h while minimizing energy usage.
+The task reward is min(h/10, 1) where h is in meters per
+second, and the energy usage penalty is action `2-norm. The
+humanoid has 21 degrees of freedom, and the observation
+consists of joint angles, joint velocities, head height, hand
+and feet positions, torso vertical orientation, and center-ofmass velocity, for a total of 67 dimensions.
+Shadow Hand: We consider three tasks on the Shadow
+Dexterous Hand: touch, turn, and orient. In the touch and
+turn tasks, policies must complete the task while minimizing “pain.” A sparse task reward of 1.0 is given for pressing
+the block with greater than 5N of force or for turning the
+dial from a random initial location to the target location.
+The pain penalty penalizes the robot for colliding with objects at high speed; this penalty is defined as in Huang et al.
+(2019). In the orient task, there are three aligned objectives:
+touching the rectangular peg, lifting it to a given height, and
+orienting it to be perpendicular to the ground. All three
+rewards are between 0 and 1. The Shadow Hand has five
+
+Humanoid Mocap: We consider a large-scale humanoid
+motion capture tracking task, similar to in Peng et al. (2018),
+in which policies must learn to follow motion capture reference data.6 There are five objectives, each capturing a
+different aspect of the similarity of the pose between the
+simulated humanoid and the mocap target: joint orientations,
+joint velocities, hand and feet positions, center-of-mass positions, and certain body positions and joint angles. These
+objectives are described in detail in Appendix B.4. In order
+to balance these multiple objectives, prior work relied on
+heavily-tuned reward functions (e.g. Peng et al., 2018). The
+humanoid has 56 degrees of freedom and the observation is
+1021-dimensional, consisting of proprioceptive observations
+as well as six steps of motion capture reference frames. In
+total, we use about 40 minutes of locomotion mocap data,
+making this an extremely challenging domain.
+Sawyer Peg-in-Hole: We train a Rethink Robotics Sawyer
+robot arm to insert a cylindrical peg into a hole, while minimizing wrist forces. The task reward is shaped toward
+positioning the peg directly above the hole and increases
+for insertion, and the penalty is the `1-norm of Cartesian
+forces measured by the wrist force-torque sensor. The latter
+implicitly penalizes contacts and impacts, as well as excessive directional change (due to the gripper’s inertia inducing
+forces when accelerating). We impose a force threshold
+to protect the hardware—if this threshold is exceeded, the
+episode is terminated. The action space is the end effector’s
+Cartesian velocity, and the observation is 102-dimensional,
+consisting of Cartesian position, joint position and velocity,
+wrist force-torque, and joint action, for three timesteps.
+6.1. Evaluation Metric
+We run MO-(V-)MPO and scalarized (V-)MPO with a wide
+range of constraint settings k and scalarization weights
+wk , respectively, corresponding to a wide range of possible
+desired preferences. (The exact settings are provided in
+Appendix A.) For tasks with two objectives, we plot the
+Pareto front found by each approach. We also compute
+the hypervolume of each found Pareto front; this metric is
+commonly-used for evaluating MORL algorithms (Vamplew
+et al., 2011). Given a set of policies Π and a reference policy
+r that is dominated by all policies in this set, this metric is
+the hypervolume of the space of all policies that dominate
+r and are dominated by at least one policy in Π. We use
+DEAP (Fortin et al., 2012) to compute hypervolumes.
+6
+This task was developed concurrently by Anonymous (2020)
+and does not constitute a contribution of this paper.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+task reward
+task
+task reward
+reward
+
+mid-training
+ofofof
+training
+scale
+penalty
+mid-trainingend
+end
+trainingnormal
+normal
+scale 10x
+10x
+penalty
+1x penalty
+mid-training
+end
+training
+normal
+scale
+10x
+penalty
+800
+800
+800
+400
+400
+400
+0 00
+
+3000
+3000 000
+3000
+
+3000
+3000 00 0 3000
+3000 00 0
+3000
+3000
+action
+norm
+penalty
+action
+norm
+penalty
+action
+norm
+penalty
+action
+norm
+penalty
+
+MO-MPO
+MO-MPO
+MO-MPO
+MO-MPO
+touch
+
+turn
+turn
+
+orient
+orient
+150
+150
+angle
+angle
+
+task reward
+task reward
+
+scalarized
+MPO
+scalarized
+MPO
+scalarized
+MPO
+scalarized
+MPO
+
+touch
+
+mid-training
+end of
+training
+touch,
+touch,
+mid-training
+mid-training
+touch
+touch
+
+0.50.5
+
+30000
+30000 00 0
+30000
+
+0.00.0
+55
+00
+55
+00
+55
+00
+pain
+painpenalty
+penalty pain
+painpenalty
+penalty pain
+painpenalty
+penalty
+
+00
+0 0 100
+100
+zz
+
+Figure 6. Pareto fronts found by MO-MPO and scalarized MOMPO for humanoid run (top row) and Shadow Hand tasks. Each
+dot represents a single trained policy. Corresponding hypervolumes are in Table 1. Task reward is discounted for touch and turn,
+with a discount factor of 0.99. For orient, the x and y axes are the
+total reward for the lift and orientation objectives, respectively.
+
+6.2. Results: Humanoid and Shadow Hand
+In the run, touch, and turn tasks, the two objectives are
+competing—a very high preference for minimizing action
+norm or pain, as opposed to getting task reward, will result
+in a policy that always chooses zero-valued actions. Across
+these three tasks, the Pareto front found by MO-MPO is
+superior to the one found by scalarized MPO, with respect
+to the hypervolume metric (Table 1).7 In particular, MOMPO finds more policies that perform well with respect to
+both objectives, i.e., are in the upper right portion of the
+Pareto front. MO-MPO also speeds up learning on run and
+touch (Fig. 6). Qualitatively, MO-MPO trains run policies
+that look more natural and “human-like”; videos are at
+http://sites.google.com/view/mo-mpo.
+When we scale the action norm penalty by 10× for run,
+scalarized MPO policies no longer achieve high task reward,
+whereas MO-MPO policies do (Fig. 6, top right). This
+supports that MO-MPO’s encoding of preferences is indeed
+scale-invariant. When the objectives are aligned and have
+similarly scaled rewards, as in the orient task, MO-MPO
+and scalarized MPO perform similarly, as expected.
+Ablation. We also ran vanilla MPO on humanoid run, with
+the same range of weight settings as for scalarized MPO, to
+investigate how useful Q-decomposition is. In vanilla MPO,
+we train a single critic on the scalarized reward function,
+We use hypervolume reference points of [0, −104 ] for run,
+[0, −105 ] for run with 10× penalty, [0, −20] for touch and turn,
+and the zero vector for orient and humanoid mocap.
+7
+
+Task
+
+scalarized MPO MO-MPO
+
+Humanoid run, mid-training
+Humanoid run
+
+1.1×106
+6.4×106
+
+3.3×106
+7.1×106
+
+Humanoid run, 1× penalty
+Humanoid run, 10× penalty
+
+5.0×106
+2.6×107
+
+5.9×106
+6.9×107
+
+Shadow touch, mid-training
+Shadow touch
+Shadow turn
+Shadow orient
+
+14.3
+16.2
+14.4
+2.8×104
+
+15.6
+16.4
+15.4
+2.8×104
+
+Humanoid Mocap
+
+3.86×10−6
+
+3.41×10−6
+
+Table 1. Hypervolume measurements across tasks and approaches.
+
+which is equivalent to removing Q-decomposition from
+scalarized MPO. Vanilla MPO trains policies that achieve
+similar task reward (up to 800), but with twice the action
+norm penalty (up to −104 ). As a result, the hypervolume
+of the Pareto front that vanilla MPO finds is more than a
+magnitude worse than that of scalarized MPO and MO-MPO
+(2.2×106 versus 2.6×107 and 6.9×107 , respectively).
+6.3. Results: Humanoid Mocap
+The objectives in this task are mostly aligned. In contrast to
+the other experiments, we use V-MPO (Song et al., 2020) as
+the base algorithm because it outperforms MPO in learning
+this task. In addition, since V-MPO is an on-policy variant of MPO, this enables us to evaluate our approach in
+the on-policy setting. Each training run is very computationally expensive, so we train only a handful of policies
+each.8 None of the MO-V-MPO policies are dominated
+by those found by V-MPO. In fact, although the weights
+span a wide range of “preferences” for the joint velocity, the
+only policies found by V-MPO that are not dominated by a
+MO-V-MPO policy are those with extreme values for joint
+velocity reward (either ≤ 0.006 or ≥ 0.018), whereas it is
+between 0.0103 and 0.0121 for MO-V-MPO policies.
+Although the hypervolume of the Pareto front found by VMPO is higher than that of MO-V-MPO (Table 1), finding
+policies that over- or under- prioritize any objective is undesirable. Qualitatively, the policies trained with MO-V-MPO
+look more similar to the mocap reference data—they exhibit
+less feet jittering, compared to those trained with scalarized
+V-MPO; this can be seen in the corresponding video.
+6.4. Results: Sawyer Peg-in-Hole
+In this task, we would like the robot to prioritize successful
+task completion, while minimizing wrist forces. With this
+8
+For MO-V-MPO, we set all k = 0.01. Also, for each objective, we set k = 0.001 and set all others to 0.01. For V-MPO,
+we fix the weights of four objectives to reasonable values, and try
+weights of [0.1, 0.3, 0.6, 1, 5] for matching joint velocities.
+
+A Distributional View on Multi-Objective Policy Optimization
+wrist force penalty
+
+200
+
+400
+
+−1200 −800
+
+task reward
+
+0
+
+200000
+400000
+0
+200000
+number of policy improvement steps
+
+MO-MPO
+
+scalarized MPO [0.95, 0.05]
+
+400000
+[0.8, 0.2]
+
+Figure 7. Task reward (left) and wrist force penalty (right) learning
+curves for the Sawyer peg-in-hole task. The policy trained with
+MO-MPO quickly learns to optimize both objectives, whereas the
+other two do not. Each line represents a single trained policy.
+
+in mind, for MO-MPO we set task = 0.1 and force = 0.05,
+and for scalarized MPO we try [wtask , wforce ] = [0.95, 0.05]
+and [0.8, 0.2]. We find that policies trained with scalarized
+MPO focus all learning on a single objective at the beginning
+of training; we also observed this in the touch task, where
+scalarized MPO policies quickly learn to either maximize
+task reward or minimize pain penalty, but not both (Fig. 6,
+bottom left). In contrast, the policy trained with MO-MPO
+simultaneously optimizes for both objectives throughout
+training. In fact, throughout training, the MO-MPO policy
+does just as well with respect to task reward as the scalarized
+MPO policy that cares more about task reward, and similarly
+for wrist force penalty (Fig. 7).
+
+7. Conclusions and Future Work
+In this paper we presented a new distributional perspective
+on multi objective reinforcement learning, that is derived
+from the Rl-as-inference perspective. This view leads to two
+novel multi-objective RL algorithms, namely MO-MPO and
+MO-V-MPO. We showed these algorithms enable practitioners to encode preferences in a scale-invariant way. Although
+MO-(V-)MPO is a single-policy approach to MORL, it is
+capable of producing a variety of Pareto-dominant policies.
+A limitation of this work is that we produced this set of
+policies by iterating over a relatively large number of ’s,
+which is computationally expensive. In future work, we
+plan to extend MO-(V-)MPO into a true multiple-policy
+MORL approach, either by conditioning the policy on settings of ’s or by developing a way to strategically select ’s
+to train policies for, analogous to what prior work has done
+for weights (e.g., Roijers et al. (2014)).
+
+References
+Abdolmaleki, A., Springenberg, J. T., Degrave, J., Bohez, S.,
+Tassa, Y., Belov, D., Heess, N., and Riedmiller, M. Relative entropy regularized policy iteration. arXiv preprint
+arXiv:1812.02256, 2018a.
+Abdolmaleki, A., Springenberg, J. T., Tassa, Y., Munos, R.,
+Heess, N., and Riedmiller, M. Maximum a posteriori
+policy optimisation. In Proceedings of the Sixth International Conference on Learning Representations (ICLR),
+2018b.
+Abels, A., Roijers, D. M., Lenaerts, T., Nowé, A., and
+Steckelmacher, D. Dynamic weights in multi-objective
+deep reinforcement learning. In Proceedings of the 36th
+International Conference on Machine Learning (ICML),
+2019.
+Achiam, J., Held, D., Tamar, A., and Abbeel, P. Constrained
+policy optimization. In Proceedings of the 34th International Conference on Machine Learning (ICML), pp.
+22–31, 2017.
+Amodei, D., Olah, C., Steinhardt, J., Christiano, P., Schulman, J., and Mané, D. Concrete problems in AI safety.
+arXiv preprint arXiv:1606.06565, 2016.
+Andersen, M. S., Dahl, J., and Vandenberghe, L. CVXOPT:
+A Python package for convex optimization, version 1.2.
+https://cvxopt.org/, 2020.
+Anonymous. CoMic: Co-Training and Mimicry for
+Reusable Skills. 2020.
+Barrett, L. and Narayanan, S. Learning all optimal policies
+with multiple criteria. In Proceedings of the 25th International Conference on Machine Learning (ICML), pp.
+41–47, 2008.
+Barth-Maron, G., Hoffman, M. W., Budden, D., Dabney, W.,
+Horgan, D., TB, D., Muldal, A., Heess, N., and Lillicrap,
+T. Distributed distributional deterministic policy gradients. In Proceedings of the Sixth International Conference
+on Learning Representations (ICLR), 2018.
+Bohez, S., Abdolmaleki, A., Neunert, M., Buchli, J., Heess,
+N., and Hadsell, R. Value constrained model-free continuous control. arXiv preprint arXiv:1902.04623, 2019.
+
+Acknowledgments
+
+Chen, X., Ghadirzadeh, A., Björkman, M., and Jensfelt, P.
+Meta-learning for multi-objective reinforcement learning.
+arXiv preprint arXiv:1811.03376, 2019.
+
+The authors would like to thank Guillaume Desjardins,
+Csaba Szepesvari, Jost Tobias Springenberg, Steven Bohez,
+Philemon Brakel, Brendan Tracey, Jonas Degrave, Jonas
+Buchli, Leslie Fritz, Chloe Rosenberg, and many others at
+DeepMind for their support and feedback on this paper.
+
+Chentanez, N., Müller, M., Macklin, M., Makoviychuk, V.,
+and Jeschke, S. Physics-based motion capture imitation
+with deep reinforcement learning. In International Conference on Motion, Interaction, and Games (MIG). ACM,
+2018.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+Chow, Y., Nachum, O., Duenez-Guzman, E., and
+Ghavamzadeh, M. A Lyapunov-based approach to safe
+reinforcement learning. In Proceedings of the 31st International Conference on Neural Information Processing
+Systems (NeurIPS), pp. 8092–8101, 2018.
+Daneshmand, M., Tale Masouleh, M., Saadatzi, M. H.,
+Ozcinar, C., and Anbarjafari, G. A robust proportionpreserving composite objective function for scaleinvariant multi-objective optimization. Scientia Iranica,
+24(6):2977–2991, 2017.
+Fortin, F.-A., De Rainville, F.-M., Gardner, M.-A., Parizeau,
+M., and Gagné, C. DEAP: Evolutionary algorithms made
+easy. Journal of Machine Learning Research, 13:2171–
+2175, July 2012.
+Friedman, E. and Fontaine, F. Generalizing across multiobjective reward functions in deep reinforcement learning.
+arXiv preprint arXiv:1809.06364, 2018.
+Gábor, Z., Kalmár, Z., and Szepesvári, C. Multi-criteria
+reinforcement learning. In Proceedings of the Fifteenth
+International Conference on Machine Learning (ICML),
+pp. 197–205, 1998.
+Grodzevich, O. and Romanko, O. Normalization and other
+topics in multi-objective optimization. In Proceedings of
+the Fields-MITACS Industrial Problems Workshop, 2006.
+Haarnoja, T., Zhou, A., Abbeel, P., and Levine, S. Soft
+actor-critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor. In Proceedings of
+the 35th International Conference on Machine Learning
+(ICML), pp. 1861–1870, 2018.
+Heess, N., Wayne, G., Silver, D., Lillicrap, T., Erez, T., and
+Tassa, Y. Learning continuous control policies by stochastic value gradients. In Advances in Neural Information
+Processing Systems 28 (NIPS). 2015.
+Hessel, M., Soyer, H., Espeholt, L., Czarnecki, W., Schmitt,
+S., and van Hasselt, H. Multi-task deep reinforcement
+learning with popart. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 33, pp. 3796–3803,
+2019.
+
+Kim, I. and de Weck, O. Adaptive weighted sum method
+for multiobjective optimization: A new method for pareto
+front generation. Structural and Multidisciplinary Optimization, 31(2):105–116, 2006.
+Kingma, D. P. and Ba, J. Adam: A method for stochastic
+optimization. In Proceedings of the Third International
+Conference on Learning Representations (ICLR), 2015.
+Le, H., Voloshin, C., and Yue, Y. Batch policy learning
+under constraints. In Proceedings of the 36th International Conference on Machine Learning (ICML), pp.
+3703–3712, 2019.
+Levine, S., Finn, C., Darrell, T., and Abbeel, P. End-to-end
+training of deep visuomotor policies. Journal of Machine
+Learning Research, 17(39):1–40, 2016.
+Liu, C., Xu, X., and Hu, D. Multiobjective reinforcement
+learning: A comprehensive overview. IEEE Transactions
+on Systems, Man, and Cybernetics: Systems, 45(3):385–
+398, 2015.
+Marler, R. T. and Arora, J. S. Function-transformation
+methods for multi-objective optimization. Engineering
+Optimization, 37(6):551–570, 2005.
+Martens, J. New perspectives on the natural gradient method.
+arXiv preprint arXiv:1412.1193, 2014.
+Merel, J., Ahuja, A., Pham, V., Tunyasuvunakool, S., Liu,
+S., Tirumala, D., Heess, N., and Wayne, G. Hierarchical visuomotor control of humanoids. In International
+Conference on Learning Representations (ICLR), 2019.
+Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness,
+J., Bellemare, M. G., Graves, A., Riedmiller, M., Fidjeland, A. K., Ostrovski, G., et al. Human-level control
+through deep reinforcement learning. Nature, 518(7540):
+529, 2015.
+Moffaert, K. V. and Nowé, A. Multi-objective reinforcement
+learning using sets of Pareto dominating policies. Journal
+of Machine Learning Research, 15:3663–3692, 2014.
+Mossalam, H., Assael, Y. M., Roijers, D. M., and Whiteson,
+S. Multi-objective deep reinforcement learning. arXiv
+preprint arXiv:1610.02707, 2016.
+
+Huang, S. H., Zambelli, M., Kay, J., Martins, M. F., Tassa,
+Y., Pilarski, P. M., and Hadsell, R. Learning gentle object
+manipulation with curiosity-driven deep reinforcement
+learning. arXiv preprint arXiv:1903.08542, 2019.
+
+Munos, R., Stepleton, T., Harutyunyan, A., and Bellemare,
+M. Safe and efficient off-policy reinforcement learning.
+In Proceedings of the 29th International Conference on
+Neural Information Processing Systems, pp. 1054–1062,
+2016.
+
+Ishibuchi, H., Doi, K., and Nojima, Y. On the effect of
+normalization in MOEA/D for multi-objective and manyobjective optimization. Complex & Intelligent Systems, 3
+(4):279–294, 2017.
+
+Natarajan, S. and Tadepalli, P. Dynamic preferences in
+multi-criteria reinforcement learning. In Proceedings of
+the 22nd International Conference on Machine Learning
+(ICML), pp. 601–608, 2005.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+Nottingham, K., Balakrishnan, A., Deshmukh, J., Christopherson, C., and Wingate, D. Using logical specifications
+of objectives in multi-objective reinforcement learning.
+arXiv preprint arXiv:1910.01723, 2019.
+Parisi, S., Pirotta, M., Smacchia, N., Bascetta, L., and
+Restelli, M. Policy gradient approaches for multiobjective sequential decision making. In Proceedings
+of the International Joint Conference on Neural Networks
+(IJCNN), pp. 2323–2330, 2014.
+Peng, X. B., Abbeel, P., Levine, S., and van de Panne, M.
+Deepmimic: Example-guided deep reinforcement learning of physics-based character skills. ACM Transactions
+on Graphics, 37(4), 2018.
+Pirotta, M., Parisi, S., and Restelli, M. Multi-objective
+reinforcement learning with continuous Pareto frontier
+approximation. In Proceedings of the Twenty-Ninth AAAI
+Conference on Artificial Intelligence (AAAI), 2015.
+Reymond, M. and Nowé, A. Pareto-DQN: Approximating the Pareto front in complex multi-objective decision
+problems. In Proceedings of the Adaptive and Learning
+Agents Workshop at the 18th International Conference
+on Autonomous Agents and MultiAgent Systems AAMAS,
+2019.
+Riedmiller, M., Hafner, R., Lampe, T., Neunert, M., Degrave, J., Van de Wiele, T., Mnih, V., Heess, N., and Springenberg, J. T. Learning by playing - solving sparse reward
+tasks from scratch. arXiv preprint arXiv:1802.10567,
+2018.
+Roijers, D. M., Vamplew, P., Whiteson, S., and Dazeley, R.
+A survey of multi-objective sequential decision-making.
+Journal of Artificial Intelligence Research, 48(1):67–113,
+2013.
+Roijers, D. M., Whiteson, S., and Oliehoek, F. A. Linear
+support for multi-objective coordination graphs. In Proceedings of the International Conference on Autonomous
+Agents and Multi-Agent Systems (AAMAS), pp. 1297–
+1304, 2014.
+Russell, S. and Zimdars, A. L. Q-decomposition for reinforcement learning agents. In Proceedings of the Twentieth International Conference on International Conference
+on Machine Learning (ICML), pp. 656–663, 2003.
+Schulman, J., Levine, S., Abbeel, P., Jordan, M., and Moritz,
+P. Trust region policy optimization. In Proceedings of
+the 32nd International Conference on Machine Learning
+(ICML), 2015.
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and
+Klimov, O. Proximal policy optimization algorithms.
+arXiv preprint arXiv:1707.06347, 2017.
+
+Shadow Robot Company.
+Shadow dexterous hand.
+https://www.shadowrobot.com/products/
+dexterous-hand/, 2020.
+Silver, D., Huang, A., Maddison, C. J., Guez, A., Sifre, L.,
+van den Driessche, G., Schrittwieser, J., Antonoglou, I.,
+Panneershelvam, V., Lanctot, M., Dieleman, S., Grewe,
+D., Nham, J., Kalchbrenner, N., Sutskever, I., Lillicrap, T.,
+Leach, M., Kavukcuoglu, K., Graepel, T., and Hassabis,
+D. Mastering the game of Go with deep neural networks
+and tree search. Nature, 529:484–503, 2016.
+Song, H. F., Abdolmaleki, A., Springenberg, J. T., Clark,
+A., Soyer, H., Rae, J. W., Noury, S., Ahuja, A., Liu,
+S., Tirumala, D., Heess, N., Belov, D., Riedmiller, M.,
+and Botvinick, M. M. V-MPO: On-policy maximum a
+posteriori policy optimization for discrete and continuous control. In International Conference on Learning
+Representations, 2020.
+Sutton, R. S. Learning to predict by the methods of temporal
+differences. Machine learning, 3(1):9–44, 1988.
+Tan, J., Zhang, T., Coumans, E., Iscen, A., Bai, Y., Hafner,
+D., Bohez, S., and Vanhoucke, V. Sim-to-real: Learning
+agile locomotion for quadruped robots. In Proceedings
+of Robotics: Science and Systems (RSS), 2018.
+Tassa, Y., Doron, Y., Muldal, A., Erez, T., Li, Y.,
+de Las Casas, D., Budden, D., Abdolmaleki, A., Merel, J.,
+Lefrancq, A., Lillicrap, T., and Riedmiller, M. Deepmind
+control suite. arXiv preprint arXiv:1801.00690, 2018.
+Teh, Y. W., Bapst, V., Czarnecki, W. M., Quan, J., Kirkpatrick, J., Hadsell, R., Heess, N., and Pascanu, R. Distral:
+Robust multitask reinforcement learning. In Proceedings
+of the 31st International Conference on Neural Information Processing Systems (NeurIPS), 2017.
+Todorov, E., Erez, T., and Tassa, Y. Mujoco: A physics
+engine for model-based control. In Proceedings of the
+IEEE/RSJ International Conference on Intelligent Robots
+and Systems (IROS), pp. 5026–5033, 2012.
+Vamplew, P., Dazeley, R., Berry, A., Issabekov, R., and
+Dekker, E. Empirical evaluation methods for multiobjective reinforcement learning algorithms. Machine Learning, 84(1):51–80, Jul 2011.
+van Hasselt, H. P., Guez, A., Hessel, M., Mnih, V., and Silver, D. Learning values across many orders of magnitude.
+In Advances in Neural Information Processing Systems,
+pp. 4287–4295, 2016.
+Van Moffaert, K., Drugan, M. M., and Nowé, A. Scalarized multi-objective reinforcement learning: Novel design techniques. In Proceedings of the IEEE Symposium
+on Adaptive Dynamic Programming and Reinforcement
+Learning (ADPRL), pp. 191–199, 2013.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+van Seijen, H., Fatemi, M., Romoff, J., Laroche, R., Barnes,
+T., and Tsang, J. Hybrid reward architecture for reinforcement learning. In Proceedings of the 31st International
+Conference on Neural Information Processing Systems
+(NeurIPS), pp. 5398–5408, 2017.
+Watkins, C. J. C. H. Learning from Delayed Rewards. PhD
+thesis, King’s College, Cambridge, UK, May 1989.
+Wray, K. H., Zilberstein, S., and Mouaddib, A.-I. Multiobjective MDPs with conditional lexicographic reward
+preferences. In Proceedings of the Twenty-Ninth AAAI
+Conference on Artificial Intelligence (AAAI), pp. 3418–
+3424, 2015.
+Wulfmeier, M., Abdolmaleki, A., Hafner, R., Springenberg,
+J. T., Neunert, M., Hertweck, T., Lampe, T., Siegel, N.,
+Heess, N., and Riedmiller, M. Regularized hierarchical
+policies for compositional transfer in robotics. arXiv
+preprint arXiv:1906.11228, 2019.
+Yang, R., Sun, X., and Narasimhan, K. A generalized algorithm for multi-objective reinforcement learning and policy adaptation. In Proceedings of the 32nd International
+Conference on Neural Information Processing Systems
+(NeurIPS), pp. 14610–14621, 2019.
+Zeng, A., Song, S., Lee, J., Rodriguez, A., and Funkhouser,
+T. Tossingbot: Learning to throw arbitrary objects with
+residual physics. In Proceedings of Robotics: Science
+and Systems (RSS), 2019.
+Zhan, H. and Cao, Y. Relationship explainable multiobjective optimization via vector value function based
+reinforcement learning. arXiv preprint arXiv:1910.01919,
+2019.
+Zuluaga, M., Krause, A., and Püschel, M. -pal: An active learning approach to the multi-objective optimization
+problem. Journal of Machine Learning Research, 17(1):
+3619–3650, 2016.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+A. Experiment Details
+In this section, we describe implementation details and specify the hyperparameters used for our algorithm. In all our
+experiments, the policy and critic(s) are implemented with
+feed-forward neural networks. We use Adam (Kingma &
+Ba, 2015) for optimization.
+In our continuous control tasks, the policy returns a Gaussian distribution with a diagonal covariance matrix, i.e,
+πθ (a|s) = N (µ, Σ). The policy is parametrized by a
+neural network, which outputs the mean µ = µ(s) and diagonal Cholesky factors A = A(s), such that Σ = AAT .
+The diagonal factor A has positive diagonal elements enforced by the softplus transform Aii ← log(1 + exp(Aii ))
+to ensure positive definiteness of the diagonal covariance
+matrix.
+Table 2 shows the default hyperparameters that we use for
+MO-MPO and scalarized MPO, and Table 3 shows the hyperparameters that differ from these defaults for the humanoid, Shadow Hand, and Sawyer experiments. For all
+tasks that we train policies with MO-MPO for, a separate
+critic is trained for each objective, with a shared first layer.
+The only exception is the action norm penalty in humanoid
+run, which is computed exactly from the action. We found
+that for both policy and critic networks, layer normalization
+of the first layer followed by a hyperbolic tangent (tanh) is
+important for the stability of the algorithm.
+In our experiments comparing the Pareto front found by
+MO-MPO versus scalarized MPO, we ran MO-MPO with a
+range of k settings and ran scalarized MPO with a range of
+weight settings, to obtain a set of policies for each algorithm.
+The settings for humanoid run and the Shadow Hand tasks
+are listed in Table 4. The settings for humanoid mocap and
+Sawyer are specified in the main paper, in Sec. 6.3 and 6.4,
+respectively.
+In the following subsections, we first give suggestions for
+choosing appropriate k to encode a particular preference
+(Sec. A.1), then we describe the discrete MO-MPO used
+for Deep Sea Treasure (Sec. A.2), and finally we describe
+implementation details for humanoid mocap (Sec. A.3).
+A.1. Suggestions for Setting 
+Our proposed algorithm, MO-(V-)MPO, requires practitioners to translate a desired preference across objectives to numerical choices for k for each objective k. At first glance,
+this may seem daunting. However, in practice, we have
+found that encoding preferences via k is often more intuitive than doing so via scalarization. In this subsection,
+we seek to give an intuition on how to set k for different
+desired preferences. Recall that each k controls the influence of objective k on the policy update, by constraining the
+KL-divergence between each objective-specific distribution
+
+Hyperparameter
+
+Default
+
+policy network
+layer sizes
+take tanh of action mean?
+minimum variance
+maximum variance
+
+(300, 200)
+yes
+10−12
+unbounded
+
+critic network(s)
+layer sizes
+take tanh of action?
+Retrace sequence size
+discount factor γ
+both policy and critic networks
+layer norm on first layer?
+tanh on output of layer norm?
+activation (after each hidden layer)
+
+(400, 400, 300)
+yes
+8
+0.99
+yes
+yes
+ELU
+
+MPO
+actions sampled per state
+default 
+KL-constraint on policy mean, βµ
+KL-constraint on policy covariance, βΣ
+initial temperature η
+training
+batch size
+replay buffer size
+Adam learning rate
+Adam 
+target network update period
+
+20
+0.1
+10−3
+10−5
+1
+512
+106
+3×10−4
+10−3
+200
+
+Table 2. Default hyperparameters for MO-MPO and scalarized
+MPO, with decoupled update on mean and covariance (Sec. C.3).
+
+and the current policy (Sec. 4.1). We generally choose k in
+the range of 0.001 to 0.1.
+Equal Preference. When all objectives are equally important, the general rule is to set all k to the same value. We
+did this in our orient and humanoid mocap tasks, where objectives are aligned or mostly aligned. In contrast, it can be
+tricky to choose appropriate weights in linear scalarization
+to encode equal preferences—setting all weights equal to
+1/K (where K is the number of objectives) is only appropriate if the objectives’ rewards are of similar scales. We
+explored this in Sec. 5.1 and Fig. 3.
+When setting all k to the same value, what should this
+value be? The larger k is, the more influence the objectives
+will have on the policy update step. Since the per-objective
+critics are learned in parallel with the policy, setting k
+too high tends to destabilize learning, because early on in
+training, when the critics produce unreliable Q-values, their
+influence on the policy will lead it in the wrong direction.
+On the other hand, if k is set too low, then it slows down
+learning, because the per-objective action distribution is
+only allowed to deviate by a tiny amount from the current
+policy, and the updated policy is obtained via supervised
+learning on the combination of these action distributions.
+
+A Distributional View on Multi-Objective Policy Optimization
+Humanoid run
+
+Condition
+
+policy network
+layer sizes
+take tanh of action mean?
+minimum variance
+
+(400, 400, 300)
+no
+10−8
+
+critic network(s)
+layer sizes
+take tanh of action?
+
+(500, 500, 400)
+no
+
+MPO
+KL-constraint on policy mean, βµ
+KL-constraint on policy covariance, βΣ
+training
+Adam learning rate
+Adam 
+
+Humanoid run (one seed per setting)
+scalarized MPO wtask = 1 − wpenalty
+wpenalty ∈ linspace(0, 0.15, 100)
+MO-MPO
+task = 0.1
+penalty ∈ linspace(10−6 , 0.15, 100)
+Humanoid run, normal vs. scaled (three seeds per setting)
+
+5×10−3
+10−6
+
+scalarized MPO wtask = 1 − wpenalty
+wpenalty ∈ {0.01, 0.05, 0.1}
+MO-MPO
+task = 0.1
+penalty ∈ {0.01, 0.05, 0.1}
+
+2×10−4
+10−8
+
+Shadow Hand touch and turn (three seeds per setting)
+
+Shadow Hand
+MPO
+actions sampled per state
+default 
+
+Settings
+
+30
+0.01
+
+scalarized MPO wtask = 1 − wpenalty
+wpenalty ∈ linspace(0, 0.9, 10)
+MO-MPO
+task = 0.01
+penalty ∈ linspace(0.001, 0.015, 15)
+Shadow Hand orient (ten seeds per setting)
+scalarized MPO wtouch = wheight = worientation = 1/3
+MO-MPO
+touch = height = orientation = 0.01
+
+Sawyer
+MPO
+actions sampled per state
+
+15
+
+training
+target network update period
+
+100
+
+Table 3. Hyperparameters for humanoid, Shadow Hand, and
+Sawyer experiments that differ from the defaults in Table 2.
+
+Eventually the learning will converge to more or less the
+same policy though, as long as k is not set too high.
+Unequal Preference. When there is a difference in preferences across objectives, the relative scale of k is what
+matters. The more the relative scale of k is compared to l ,
+the more influence objective k has over the policy update,
+compared to objective l. And in the extreme case, when
+l is near-zero for objective l, then objective l will have
+no influence on the policy update and will effectively be
+ignored. We explored this briefly in Sec. 5.1 and Fig. 4.
+One common example of unequal preferences is when we
+would like an agent to complete a task, while minimizing other objectives—e.g., an action norm penalty, “pain”
+penalty, or wrist force-torque penalty, in our experiments.
+In this case, the  for the task objective should be higher
+than that for the other objectives, to incentivize the agent to
+prioritize actually doing the task. If the  for the penalties
+is too high, then the agent will care more about minimizing the penalty (which can typically be achieved by simply
+taking no actions) rather than doing the task, which is not
+particularly useful.
+The scale of k has a similar effect as in the equal preference
+
+Table 4. Settings for k and weights. (linspace(x, y, z) denotes a
+set of z evenly-spaced values between x and y.)
+
+case. If the scale of k is too high or too low, then the same
+issues arise as discussed for equal preferences. If all k
+increase or decrease in scale by the same (moderate) factor,
+and thus their relative scales remain the same, then typically
+they will converge to more or less the same policy. This
+can be seen in Fig. 5 (right), in the Deep Sea Treasure
+domain: regardless of whether time is 0.01, 0.02, or 0.05,
+the relationship between the relative scale of treasure and
+time to the treasure that the policy converges to selecting is
+essentially the same.
+A.2. Deep Sea Treasure
+In order to handle discrete actions, we make several minor adjustments to scalarized MPO and MO-MPO. The
+policy returns a categorical distribution, rather than a Gaussian. The policy is parametrized by a neural network, which
+outputs a vector of logits (i.e., unnormalized log probabilities) of size |A|. The KL constraint on the change of this
+policy, β, is 0.001. The input to the critic network is the
+state concatenated with a four-dimensional one-hot vector
+denoting which action is chosen (e.g., the up action corresponds to [1, 0, 0, 0]> ). Critics are trained with one-step
+temporal-difference error, with a discount of 0.999. Other
+than these changes, the network architectures and the MPO
+and training hyperparameters are the same as in Table 2.
+
+A Distributional View on Multi-Objective Policy Optimization
+Humanoid Mocap
+Scalarized VMPO
+KL-constraint on policy mean, βµ
+0.1
+KL-constraint on policy covariance, βΣ 10−5
+default 
+0.1
+initial temperature η
+1
+Training
+Adam learning rate
+10−4
+batch size
+128
+unroll length (for n-step return, Sec. D.1) 32
+
+0.7
+8.2
+11.5
+14.0 15.1 16.1
+
+19.6 20.3
+22.4
+
+Table 5. Hyperparameters for the humanoid mocap experiments.
+
+A.3. Humanoid Mocap
+For the humanoid mocap experiments, we used the following architecture for both MO-VMPO and VMPO: for the
+policy, we process a concatentation of the mocap reference
+observations and the proprioceptive observations by a two
+layer MLP with 1024 hidden units per layer. This reference
+encoder is followed by linear layers to produce the mean
+and log standard deviation of a stochastic latent variable.
+These latent variables are then concatenated with the proprioceptive observations and processed by another two layer
+MLP with 1024 hidden units per layer, to produce the action
+distribution. For VMPO, we use a three layer MLP with
+1024 hidden units per layer as the critic. For MO-VMPO
+we use a shared two layer MLP with 1024 hidden units per
+layer followed by a one layer MLP with 1024 hidden units
+per layer per objective. In both cases we use k-step returns
+to train the critic with a discount factor of 0.95. Table 5
+shows additional hyperparameters used in our experiments.
+
+B. Experimental Domains
+We evaluated our approach on one discrete domain (Deep
+Sea Treasure), three simulated continuous control domains
+(humanoid, Shadow Hand, and humanoid mocap), and one
+real-world continuous control domain (Sawyer robot). Here
+we provide more detail about these domains and the objectives used in each task.
+B.1. Deep Sea Treasure
+Deep Sea Treasure (DST) is a 11×10 grid-world domain,
+the state space S consists of the x and y position of the agent
+and the action space A is {up, right, down, left}. The
+layout of the environment and values of the treasures are
+shown in Fig. 8. If the action would cause the agent to
+collide with the sea floor or go out of bounds, it has no
+effect. Farther-away treasures have higher values. The
+episode terminates when the agent collects a treasure, or
+after 200 timesteps.
+
+23.7
+
+Figure 8. Deep Sea Treasure environment from Vamplew et al.
+(2011), with weights from Yang et al. (2019). Treasures are labeled
+with their respective values. The agent can move around freely
+in the white squares, but cannot enter the black squares (i.e., the
+ocean floor).
+
+There are two objectives, time penalty and treasure value.
+A time penalty of −1 is given at each time step. The agent
+receives the value of the treasure it picks up as the reward
+for the treasure objective. In other words, when the agent
+picks up a treasure of value v, the reward vector is [−1, v];
+otherwise it is [−1, 0].
+B.2. Shadow Hand
+Our robot platform is a simulated Shadow Dexterous Hand
+(Shadow Robot Company, 2020) in the MuJoCo physics
+engine (Todorov et al., 2012). The Shadow Hand has five
+fingers and 24 degrees of freedom, actuated by 20 motors.
+The observation consists of joint angles, joint velocities, and
+touch sensors, for a total of 63 dimensions. Each fingertip
+of our Shadow Hand has a 4×4 spatial touch sensor. This
+sensor has three channels, measuring the normal force and
+the x and y-axis tangential forces, for a sensor dimension of
+4×4×3 per fingertip. We simplify this sensor by summing
+across spatial dimensions, resulting in a 1×1×3 observation
+per fingertip.
+In the touch task, there is a block in the environment that is
+always fixed in the same pose. In the turn task, there is a dial
+in the environment that can be rotated, and it is initialized to
+a random position between −30◦ and 30◦ . The target angle
+of the dial is 0◦ . The angle of the dial is included in the
+agent’s observation. In the orient task, the robot interacts
+with a rectangular peg in the environment; the initial and
+target pose of the peg remains the same across episodes.
+The pose of the block is included in the agent’s observation,
+encoded as the xyz positions of four corners of the block
+(based on how Levine et al. (2016) encodes end-effector
+pose).
+
+A Distributional View on Multi-Objective Policy Optimization
+
+height objective
+
+orientation objective
+
+reward
+
+1
+
+0
+6.75
+
+pain penalty
+
+Figure 9. These images show what task completion looks like for
+the touch, turn, and orient Shadow Hand tasks (from left to right).
+
+7.00
+zpeg
+
+7.25 0
+
+2
+d(θ, θpeg )
+
+0
+Figure 11. In the orient Shadow Hand task, the height and orientation objectives have shaped rewards, as plotted here.
+
+−2
+−4
+−6
+
+B.2.2. A LIGNED O BJECTIVES
+0
+
+2
+
+4
+impact force
+
+6
+
+Figure 10. In the touch and turn Shadow Hand tasks, the pain
+penalty is computed based on the impact force, as plotted here. For
+low impact forces, the pain penalty is near-zero. For high impact
+forces, the pain penalty is equal to the negative of the impact force.
+
+B.2.1. BALANCING TASK C OMPLETION AND PAIN
+In the touch and turn tasks, there are two objectives, “pain”
+penalty and task completion. A sparse task completion reward of 1 is given for pressing a block with greater than 5N
+of force or turning a dial to a fixed target angle, respectively.
+In both tasks, the episode terminates when the agent completes the task; i.e., the agent gets a total reward of either
+0 or 1 for the task completion objective per episode. The
+Pareto plots for these two tasks in the main paper (Fig. 6)
+show the discounted task reward (with a discount factor of
+γ = 0.99), to capture how long it takes agents to complete
+the task.
+The “pain” penalty is computed as in (Huang et al., 2019). It
+is based on the impact force m(s, s0 ), which is the increase
+in force from state s to the next state s0 . In our tasks, this is
+measured by a touch sensor on the block or dial. The pain
+penalty is equal to the negative of the impact force, scaled
+by how unacceptable it is:
+
+
+rpain (s, a, s0 ) = − 1 − aλ (m(s, s0 )) m(s, s0 ) ,
+
+(6)
+
+where aλ (·) ∈ [0, 1] computes the acceptability of an impact
+force. aλ (·) should be a monotonically decreasing function,
+that captures how resilient the robot and the environment
+are to impacts. As in (Huang et al., 2019), we use
+aλ (m) = sigmoid(λ1 (−m + λ2 )) ,
+
+(7)
+
+with λ = [2, 2]> . The relationship between pain penalty
+and impact force is plotted in Fig. 10.
+
+In the orient task, there are three non-competing objectives:
+touching the peg, lifting the peg to a target height, and orienting the peg to be perpendicular to the ground. The target
+z position and orientation is shown by the gray transparent
+peg (Fig. 9, right-most); note that the x and y position is
+not specified, so the robot in the figure gets the maximum
+reward with respect to all three objectives.
+The touch objective has a sparse reward of 1 for activating the peg’s touch sensor, and zero otherwise. For the
+height objective, the target z position is 7cm above the
+ground; the peg’s z position is computed with respect to
+its center of mass. The shaped reward for this objective
+is 1 − tanh(50|ztarget − zpeg |). For the orientation objective, since the peg is symmetrical, there are eight possible
+orientations that are equally valid. The acceptable target
+orientations Qtarget and the peg’s orientation qpeg are denoted
+as quaternions. The shaped reward is computed with respect
+to the closest target quaternion, as
+min 1 − tanh(2∗ d(q, qpeg )) ,
+
+q∈Qtarget
+
+where d(·) denotes the `2-norm of the axis-angle equivalent
+(in radians) for the distance between the two quaternions.
+Fig. 11 shows the shaping of the height and orientation
+rewards.
+B.3. Humanoid
+We make use of the humanoid run task from Tassa et al.
+(2018).9 The observation dimension is 67 and the action
+dimension is 21. Actions are joint accelerations with minimum and maximum limits of −1 and 1, respectively. For
+this task there are two objectives:
+• The original task reward given by the environment. The
+goal is is to achieve a horizontal speed of 10 meters per
+second, in any direction. This reward is shaped: it is
+equal to min(h/10, 1) where h is in meters per second.
+For this objective we learn a Q-function.
+9
+
+This task is available at github.com/deepmind/dm control.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+• Limiting energy usage, by penalizing taking highmagnitude actions. The penalty is the `2-norm of the
+action vector, i.e, rpenalty (a) = −kak2 . For this objective, we do not learn a Q-function. Instead, we
+compute this penalty directly to evaluate a given action
+in a state-independent way during policy optimization.
+B.4. Humanoid Mocap
+The motion capture tracking task used in this paper was
+developed as part of a concurrent submission (Anonymous,
+2020) and does not constitute a contribution of this paper.
+We use a simulated humanoid adapted from the “CMU
+humanoid” available at dm control/locomotion (Merel et al.,
+2019). We adjusted various body and actuator parameters
+to be more comparable to that of an average human. This
+humanoid has 56 degrees of freedom and the observation is
+1021-dimensional.
+This motion capture tracking task is broadly similar to previous work on motion capture tracking (Chentanez et al., 2018;
+Peng et al., 2018; Merel et al., 2019). The task is associated
+with an underlying set of motion capture clips. For this
+paper we used roughly 40 minutes of locomotion motion
+capture clips from the CMU motion capture database.10
+
+third reward component is based on the difference in endeffector positions:
+
+2
+rapp = exp −40kpapp − pref
+,
+app k
+where papp and pref
+app are the end effector positions of the
+simulated humanoid and the mocap reference, respectively.
+The fourth reward component is based on the difference in
+joint orientations:
+
+ref 2
+rquat = exp −2kqquat  qquat
+k ,
+ref
+where  denotes quaternion differences and qquat and qquat
+are the joint quaternions of the simulated humanoid and the
+mocap reference, respectively.
+
+Finally, the last reward component is based on difference in
+the joint angles and the Euclidean positions of a set of 13
+body parts:
+:=ε
+
+z
+}|
+{
+1
+ref
+rtrunc = 1 −
+(kbpos − bref
+k
++
+kq
+−
+q
+k
+pos
+pos 1
+pos 1 ),
+0.3
+where bpos and bref
+pos correspond to the body positions of the
+simulated character and the mocap reference and qpos , and
+ref
+qpos
+correspond to the joint angles.
+
+At the beginning of a new episode, we select a frame uniformly at random from all frames in the underlying mocap
+data (excluding the last 10 frames of each clip). The simulated humanoid is then initialized to the pose of the selected
+frame.
+
+We include an early termination condition in our task that is
+linked to this last reward term. We terminate the episode if
+ε > 0.3, which ensures that rtrunc ∈ [0, 1].
+
+The observations in this environment are various proprioceptive observations about the current state of the body as well
+as the relative target positions and orientations of 13 different body parts in the humanoid’s local frame. We provide
+the agent with the target poses for the next 5 timesteps.
+
+r=
+
+The choice of reward function is crucial for motion capture
+tracking tasks. Here we consider five different reward components, each capturing a different aspect of the similarity
+of the pose between the simulated humanoid and the mocap
+target. Four of our reward components were initially proposed by Peng et al. (2018). The first reward component is
+based on the difference in the center of mass:
+
+2
+rcom = exp −10kpcom − pref
+,
+com k
+where pcom and pref
+com are the positions of the center of mass
+of the simulated humanoid and the mocap reference, respectively. The second reward component is based on the
+difference in joint angle velocities:
+
+ref 2
+rvel = exp −0.1kqvel − qvel
+k ,
+ref
+where qvel and qvel
+are the joint angle velocities of the simulated humanoid and the mocap reference, respectively. The
+10
+
+This database is available at mocap.cs.cmu.edu.
+
+In our MO-VMPO experiments, we treat each reward component as a separate objective. In our VMPO experiments,
+we use a reward of the form:
+1
+1
+rtrunc + (0.1rcom + λrvel + 0.15rapp + 0.65rquat ) ,
+2
+2
+(8)
+
+varying λ as described in the main paper (Sec. 6.3).
+B.5. Sawyer
+The Sawyer peg-in-hole setup consists of a Rethink Robotics
+Sawyer robot arm. The robot has 7 joints driven by series
+elastic actuators. On the wrist, a Robotiq FT 300 forcetorque sensor is mounted, followed by a Robotiq 2F85 parallel gripper. We implement a 3D end-effector Cartesian
+velocity controller that maintains a fixed orientation of the
+gripper. The agent controls the Cartesian velocity setpoints.
+The gripper is not actuated in this setup. The observations
+provided are the joint positions, velocities, and torques, the
+end-effector pose, the wrist force-torque measurements, and
+the joint velocity command output of the Cartesian controller. We augment each observation with the two previous
+observations as a history.
+In each episode, the peg is initalized randomly within an
+8×8×8 cm workspace (with the peg outside of the hole).
+
+A Distributional View on Multi-Objective Policy Optimization
+
+The environment is then run at 20 Hz for 600 steps. The
+action limits are ±0.05 m/s on each axis. If the magnitude
+of the wrist force-torque measurements exceeds 15 N on
+any horizontal axis (x and y axis) or 5 N on the vertical axis
+(z axis), the episode is terminated early.
+
+(10)
+
+We use an asynchronous actor-learner setup, in which actors regularly fetch policy parameters from the learner and
+act in the environment, writing these transitions to the replay buffer. We refer to this policy as the behavior policy
+throughout the paper. The learner uses the transitions in
+the replay buffer to update the (online) Q-functions and the
+policy. Please see Algorithms 2 and 3 for more details on
+the actor and learner processes, respectively.
+
+(11)
+
+Algorithm 2 MO-MPO: Asynchronous Actor
+
+(12)
+
+1: given (N) reward functions {rk (s, a)}N
+k=1 , T steps per
+
+There are two objectives: the task itself (inserting the peg),
+and minimizing wrist force measurements.
+The reward for the task objective is defined as
+
+
+rinsertion = max 0.2rapproach , rinserted
+peg
+
+rapproach = s(p
+
+opening
+
+,p
+
+)
+
+bottom
+rinserted = raligned s(ppeg
+)
+z , pz
+peg
+opening
+raligned = pxy − pxy
+< d/2
+
+(9)
+
+where ppeg is the peg position, popening the position of the
+hole opening, pbottom the bottom position of the hole and d
+the diameter of the hole.
+s(p1 , p2 ) is a shaping operator
+√
+atanh( l)
+s(p1 , p2 ) = 1 − tanh (
+kp1 − p2 k2 ) ,
+
+2
+
+(13)
+
+which gives a reward of 1 − l if p1 and p2 are at a Euclidean
+distance of . Here we chose lapproach = 0.95, approach =
+0.01, linserted = 0.5, and inserted = 0.04. Intentionally, 0.04
+corresponds to the length of the peg such that rinserted = 0.5
+if ppeg = popening . As a result, if the peg is in the approach
+position, rinserted is dominant over rapproach in rinsertion .
+Intuitively, there is a shaped reward for aligning the peg
+with a magnitude of 0.2. After accurate alignment within
+a horizontal tolerance, the overall reward is dominated by
+a vertical shaped reward component for insertion. The horizontal tolerance threshold ensures that the agent is not
+encouraged to try to insert the peg from the side.
+The reward for the secondary objective, minimizing wrist
+force measurements, is defined as
+rforce = −kF k1 ,
+
+parameters from the online network. Online networks are
+updated using gradient descent in each learning iteration.
+Note that in the main paper, we refer to the target policy
+network as the old policy, πold .
+
+(14)
+
+where F = (Fx , Fy , Fz ) are the forces measured by the
+wrist sensor.
+
+C. Algorithmic Details
+C.1. General Algorithm Description
+We maintain one online network and one target network for
+each Q-function associated to objective k, with parameters
+denoted by φk and φ0k , respectively. We also maintain one
+online network and one target network for the policy, with
+parameters denoted by θ and θ0 , respectively. Target networks are updated every fixed number of steps by copying
+
+episode
+
+2: repeat
+3:
+Fetch current policy parameters θ from learner
+4:
+// Collect trajectory from environment
+5:
+τ = {}
+6:
+for t = 0, . . . , T do
+7:
+at ∼ πθ (·|st )
+8:
+// Execute action and determine rewards
+9:
+r = [r1 (st , at ), . . . , rN (st , at )]
+10:
+τ ← τ ∪ {(st , at , r, πθ (at |st ))}
+11:
+end for
+12:
+Send trajectory τ to replay buffer
+13: until end of training
+
+C.2. Retrace for Multi-Objective Policy Evaluation
+Recall that the goal of the policy evaluation stage (Sec. 4.1)
+is to learn the Q-function Qφk (s, a) for each objective k,
+parametrized by φk . These Q-functions are with respect
+to the policy πold . We emphasize that it is valid to use any
+off-the-shelf Q-learning algorithm, such as TD(0) (Sutton,
+1988), to learn these Q-functions. We choose to use Retrace
+(Munos et al., 2016), described here.
+Given a replay buffer D containing trajectory snippets
+τ = {(s0 , a0 , r 0 , s1 ), . . . , (sT , aT , r T , sT +1 )}, where r t
+denotes a reward vector {rk (st , at )}N
+k=1 that consists of a
+scalar reward for each of N objectives, the Retrace objective
+is as follows:
+h
+i
+2
+min Eτ ∼D Qret
+,
+(15)
+k (st , at ) − Q̂φk (st , at ))
+φk
+
+with
+Qret
+k (st , at ) = Q̂φ0k (st , at ) +
+
+T
+X
+
+γ j−t
+
+j
+ Y
+
+j=t
+j
+
+z=t+1
+
+δ = rk (sj , aj ) + γV (sj+1 ) − Q̂φ0k (sj , aj ) ,
+V (sj+1 ) = Eπold (a|sj+1 ) [Q̂φ0k (sj+1 , a)] .
+
+
+cz δ j ,
+
+A Distributional View on Multi-Objective Policy Optimization
+
+Algorithm 3 MO-MPO: Asynchronous Learner
+1: given batch size (L), number of actions (M), (N) Q-functions,
+(N) preferences {k }N
+k=1 , policy networks, and replay buffer
+D
+2: initialize Lagrangians {ηk }N
+k=1 and ν, target networks, and
+online networks such that πθ0 = πθ and Qφ0k = Qφk
+3: repeat
+4: repeat
+L,M,N
+5:
+// Collect dataset {si , aij , Qij
+, where
+k }i,j,k
+ij
+i
+ij
+i
+6:
+// s ∼ D, a ∼ πθ0 (a|s ), and Qk = Qφk 0 (si , aij )
+7:
+8:
+// Compute action distribution for each objective
+9:
+for k = 1, . . . , N do
+
+ ij 
+P 1
+PM 1
+Qk
+δηk ← ∇ηk ηk k + ηk L
+log
+exp
+10:
+i L
+j M
+ηk
+11:
+
+Update ηk based on δηk
+ij
+
+12:
+13:
+14:
+15:
+16:
+17:
+18:
+
+Q
+
+qkij ∝ exp( ηkk )
+end for
+
+optimization:
+πnew = argmax
+θ
+
+Z
+s.t.
+s
+
+N Z
+X
+
+Z
+µ(s)
+
+s
+
+k=1
+
+qk (a|s) log πθ (a|s) da ds
+a
+
+µ(s) KL(πold (a|s) k πθ (a|s)) ds < β . (16)
+
+We first write the generalized Lagrangian equation, i.e.
+Z
+N Z
+X
+L(θ, ν) =
+µ(s) qk (a|s) log πθ (a|s) da ds (17)
+s
+
+k=1
+
+a
+
+
+
++ν β−
+
+Z
+s
+
+
+µ(s) KL(πold (a|s) k πθ (a|s)) ds ,
+
+where ν is the Lagrangian multiplier. Now we solve the
+following primal problem,
+max min L(θ, ν) .
+
+// Update parametric policy with trust region
+// sg denotes a stop-gradient
+P PM PN ij
+ij i
+δπ ← −∇θ L
+j
+k qk log πθ (a |s )
+i
+
+PL
++sg(ν) β − i KL(πθ0 (a|si ) k πθ (a|si )) ds
+
+
+P
+i
+i
+0 (a|s ) k πsg(θ) (a|s )) ds
+δν ← ∇ν ν β− L
+KL(π
+θ
+i
+Update πθ based on δπ
+Update ν based on δν
+
+19:
+20:
+21:
+22:
+23:
+// Update Q-functions
+24:
+for k = 1, . . . , N do
+2
+P
+25:
+δφk ← ∇φk (st ,at )∈τ ∼D Q̂φk (st , at ) − Qret
+k
+26:
+with Qret
+k as in Eq. 15
+27:
+Update φk based on δφk
+28:
+end for
+29:
+30:
+until fixed number of steps
+31:
+// Update target networks
+32:
+πθ0 = πθ , Qφk 0 = Qφk
+33: until convergence
+
+The importance weights ck are defined as
+
+
+πold (az |sz )
+cz = min 1,
+,
+b(az |sz )
+where b(az |sz ) denotes the behavior policy used to collect
+ Q trajectories
+ in the environment. When j = t, we set
+j
+c
+z=t+1 z = 1.
+We also make use of a target network for each Q-function
+(Mnih et al., 2015), parametrized by φ0k , which we copy
+from the online network φk after a fixed number of gradient
+steps on the Retrace objective (15).
+C.3. Policy Fitting
+Recall that fitting the policy in the policy improvement
+stage (Sec. 4.2.2) requires solving the following constrained
+
+θ
+
+ν>0
+
+To obtain the parameters θ for the updated policy, we solve
+for ν and θ by alternating between 1) fixing ν to its current
+value and optimizing for θ, and 2) fixing θ to its current
+value and optimizing for ν. This can be applied for any
+policy output distribution.
+For Gaussian policies, we decouple the update rules to optimize for mean and covariance independently, as in (Abdolmaleki et al., 2018b). This allows for setting different
+KL bounds for the mean (βµ ) and covariance (βΣ ), which
+results in more stable learning. To do this, we first separate
+out the following two policies for mean and covariance,
+
+
+πθµ (a|s) = N a; µθ (s), Σθold (s) ,
+(18)
+
+
+πθΣ (a|s) = N a; µθold (s), Σθ (s) .
+(19)
+Policy πθµ (a|s) takes the mean from the online policy network and covariance from the target policy network, and
+policy πθΣ (a|s) takes the mean from the target policy network and covariance from online policy network. Now our
+optimization problem has the following form:
+
+max
+
+N Z
+X
+
+θ
+
+s
+
+Z
+µ(s)
+a
+
+
+
+qk (a|s) log πθµ (a|s)πθΣ (a|s) da ds
+
+Z k=1
+s.t. µ(s) KL(πold (a|s) k πθµ (a|s)) ds < βµ
+Zs
+µ(s) KL(πold (a|s) k πθΣ (a|s)) ds < βΣ .
+
+(20)
+
+s
+
+As in (Abdolmaleki et al., 2018b), we set a much smaller
+bound for covariance than for mean, to keep the exploration
+and avoid premature convergence. We can solve this optimization problem using the same general procedure as
+described above.
+
+A Distributional View on Multi-Objective Policy Optimization
+
+C.4. Derivation of Dual Function for η
+Recall that obtaining the per-objective improved action distributions qk (a|s) in the policy improvement stage (Sec.
+4.2.1) requires solving a convex dual function for the temperature ηk for each objective. For the derivation of this
+dual function, please refer to Appendix D.2 of the original
+MPO paper (Abdolmaleki et al., 2018b).
+
+D. MO-V-MPO: Multi-Objective On-Policy
+MPO
+In this section we describe how MO-MPO can be adapted
+to the on-policy case, in which a state-value function V (s)
+is learned and used to estimate the advantages for each
+objective. We call this approach MO-V-MPO.
+D.1. Multi-objective policy evaluation in the on-policy
+setting
+In the on-policy setting, to evaluate the previous policy
+πold , we use advantages A(s, a) estimated from a learned
+state-value function V (s), instead of a state-action value
+function Q(s, a) as in the main text. We train a separate
+V -function for each objective by regressing to the standard n-step return (Sutton, 1988) associated with each objective. More concretely, given trajectory snippets τ =
+{(s0 , a0 , r 0 ), . . . , (sT , aT , r T )} where r t denotes a reward
+vector {rk (st , at )}N
+k=1 that consists of rewards for all N objectives, we find value function parameters φk by optimizing
+the following objective:
+min
+φ1:k
+
+N
+X
+k=1
+
+h
+Eτ
+
+i
+(T )
+Gk (st , at ) − Vφπkold (st ))2 .
+
+(21)
+
+(T )
+
+Here Gk (st , at ) is the T -step target for value function
+k, which uses the actual rewards in the trajectory and
+bootstraps from the current value function for the rest:
+PT −1
+(T )
+Gk (st , at ) = `=t γ `−t rk (s` , a` ) + γ T −t Vφπkold (s`+T ).
+The advantages are then estimated as Aπk old (st , at ) =
+(T )
+Gk (st , at ) − Vφπkold (st ).
+D.2. Multi-objective policy improvement in the
+on-policy setting
+Given the previous policy πold (a|s) and estimated advantages {Aπk old (s, a)}k=1,...,N associated with this policy for
+each objective, our goal is to improve the previous policy.
+To this end, we first learn an improved variational distribution qk (s, a) for each objective, and then combine and distill
+the variational distributions into a new parametric policy
+πnew (a|s). Unlike in MO-MPO, for MO-V-MPO we use the
+joint distribution qk (s, a) rather than local policies qk (a|s)
+because, without a learned Q-function, only one action per
+state is available for learning. This is a multi-objective vari-
+
+ant of the two-step policy improvement procedure employed
+by V-MPO (Song et al., 2020).
+D.2.1. O BTAINING IMPROVED VARIATIONAL
+DISTRIBUTIONS PER OBJECTIVE (S TEP 1)
+In order to obtain the improved variational distributions
+qk (s, a), we optimize the RL objective for each objective
+Ak :
+Z
+max
+qk (s, a) Ak (s, a) da ds
+(22)
+qk
+
+s,a
+
+s.t. KL(qk (s, a)kpold (s, a)) < k ,
+where the KL-divergence is computed over all (s, a), k denotes the allowed expected KL divergence, and pold (s, a) =
+µ(s)πold (a|s) is the state-action distribution associated with
+πold .
+As in MO-MPO, we use these k to define the preferences
+over objectives. More concretely, k defines the allowed contribution of objective k to the change of the policy. Therefore, the larger a particular k is with respect to others, the
+more that objective k is preferred. On the other hand, if
+k = 0 is zero, then objective k will have no contribution to
+the change of the policy and will effectively be ignored.
+Equation (22) can be solved in closed form:
+ A (s, a) 
+k
+qk (s, a) ∝ pold (s, a) exp
+,
+ηk
+
+(23)
+
+where the temperature ηk is computed based on the constraint k by solving the following convex dual problem
+
+ηk = argmin ηk k +
+(24)
+ηk
+
+Z
+ A (s, a) 
+k
+ηk log
+pold (s, a) exp
+da ds .
+η
+s,a
+We can perform the optimization along with the loss by
+taking a gradient descent step on ηk , and we initialize with
+the solution found in the previous policy iteration step. Since
+ηk must be positive, we use a projection operator after each
+gradient step to maintain ηk > 0.
+Top-k advantages. As in Song et al. (2020), in practice
+we used the samples corresponding to the top 50% of advantages in each batch of data.
+D.2.2. F ITTING A NEW PARAMETRIC POLICY (S TEP 2)
+We next want to combine and distill the state-action distributions obtained in the previous step into a single parametric
+policy πnew (a|s) that favors all of the objectives according
+to the preferences specified by k . For this we solve a supervised learning problem that fits a parametric policy as
+follows:
+
+A Distributional View on Multi-Objective Policy Optimization
+
+πnew = argmax
+θ
+
+Z
+s.t.
+s
+
+N Z
+X
+k=1
+
+stays close to the target policy during each policy improvement step, to improve stability of learning (Sec. E.2).
+qk (s, a) log πθ (a|s) da ds
+
+s,a
+
+KL(πold (a|s) k πθ (a|s)) ds < β ,
+
+(25)
+
+where θ are the parameters of our function approximator
+(a neural network), which we initialize from the weights of
+the previous policy πold , and the KL constraint enforces a
+trust region of size β that limits the overall change in the
+parametric policy, to improve stability of learning. As in
+MPO, the KL constraint in this step has a regularization
+effect that prevents the policy from overfitting to the local
+policies and therefore avoids premature convergence.
+
+We use the standard expectation-maximization
+(EM) algoPN
+rithm to efficiently maximize k=1 log pθ (Rk = 1). The
+EM algorithm repeatedly constructs a tight lower bound in
+the E-step, given the previous estimate of θ (which corresponds to the target policy in our case), and then optimizes
+that lower bound in the M-step. We introduce a variational
+distribution qk (s, a) per objective, and use this to decomPN
+pose the log-evidence k=1 log pθ (Rk = 1) as follows:
+N
+X
+
+log pθ (Rk = 1)
+
+=
+
+In order to optimize Equation (25), we employ Lagrangian
+relaxation similar to the one employed for ordinary VMPO (Song et al., 2020).
+
+N
+X
+k=1
+N
+X
+k=1
+
+E. Multi-Objective Policy Improvement as
+Inference
+
+We assume there are observable binary improvement events,
+{Rk }N
+k=1 , for each objective. Rk = 1 indicates that our
+policy has improved for objective k, while Rk = 0 indicates
+that it has not. Now we ask, if the policy has improved with
+respect to all objectives, i.e., {Rk = 1}N
+k=1 , what would the
+parameters θ of that improved policy be? More concretely,
+this is equivalent to the maximum a posteriori estimate for
+{Rk = 1}N
+k=1 :
+θ
+
+(26)
+
+where the probability of improvement events depends on θ.
+Assuming independence between improvement events Rk
+and using log probabilities leads to the following objective:
+max
+θ
+
+N
+X
+
+KL(qk (s, a) k pθ (s, a|Rk = 1)) −
+KL(qk (s, a) k pθ (Rk = 1, s, a)) .
+
+The second term of this decomposition is expanded as:
+
+In the main paper, we motivated the multi-objective policy
+update rules from an intuitive perspective. In this section, we
+show that our multi-objective policy improvement algorithm
+can also be derived from the RL-as-inference perspective. In
+the policy improvement stage, we assume that a Q-function
+for each objective is given, and we would like to improve
+our policy with respect to these Q-functions. The derivation here extends the derivation for the policy improvement
+algorithm in (single-objective) MPO in Abdolmaleki et al.
+(2018a) (in appendix) to the multi-objective case.
+
+max pθ (R1 = 1, R2 = 1, . . . , RN = 1) p(θ) ,
+
+(28)
+
+k=1
+
+N
+X
+k=1
+
+KL(qk (s, a) k pθ (Rk = 1, s, a))
+=
+
+N
+X
+k=1
+
+=
+
+N
+X
+k=1
+
+(29)
+
+h
+pθ (Rk = 1, s, a) i
+Eqk (s,a) log
+qk (s, a)
+h
+p(Rk = 1|s, a)πθ (a|s)µ(s) i
+Eqk (s,a) log
+,
+qk (s, a)
+
+where µ(s) is the stationary state distribution, which is assumed to be given in each policy improvement step. In
+practice, µ(s) is approximated by the distribution of the
+states in the replay buffer. p(Rk = 1|s, a) is the likelihood
+of the improvement event for objective k, if our policy chose
+action a in state s.
+The first term of the decomposition in Equation (28) is
+always positive, soPthe second term is a lower bound on
+N
+the log-evidence
+k=1 log pθ (Rk = 1). πθ (a|s) and
+qk (s,a)
+qk (a|s) = µ(s) are unknown, even though µ(s) is given.
+In the E-step, we estimate qk (a|s) for each objective k by
+minimizing the first term, given θ = θ 0 (the parameters of
+the target policy). Then in the M-step, we find a new θ by
+fitting the parametric policy to the distributions from first
+step.
+E.1. E-Step
+
+log pθ (Rk = 1) + log p(θ) .
+
+(27)
+
+k=1
+
+The prior distribution over parameters, p(θ), is fixed during
+the policy improvement step. We set the prior such that πθ
+
+The E-step corresponds to the first step of policy improvement in the main paper (Sec. 4.2.1). In the E-step, we
+choose the variational distributions {qk (a|s)}N
+k=1 such that
+PN
+the lower bound on k=1 log pθ (Rk = 1) is as tight as
+
+A Distributional View on Multi-Objective Policy Optimization
+
+possible when θ = θ 0 , the parameters of the target policy.
+The lower bound is tight when the first term of the decomposition in Equation (28) is zero, so we choose qk to minimize
+this term. We can optimize for each variational distribution
+qk independently:
+h
+i
+qk (a|s) = argmin Eµ(s) KL(q(a|s) k pθ0 (s, a|Rk = 1))
+q
+h
+= argmin Eµ(s) KL(q(a|s) k πθ0 (a|s)) −
+q
+i
+Eq(a|s) log p(Rk = 1|s, a)) .
+(30)
+We can solve this optimization problem in closed form,
+which gives us
+
+qk (a|s) = R
+
+πθ0 (a|s) p(Rk = 1|s, a)
+.
+πθ0 (a|s) p(Rk = 1|s, a) da
+
+This solution weighs the actions based on their relative
+improvement likelihood p(Rk = 1|s, a) for each objective.
+We define the likelihood of an improvement event Rk as
+p(Rk = 1|s, a) ∝ exp
+
+ Q (s, a) 
+k
+
+αk
+
+,
+
+where αk is an objective-dependent temperature parameter
+that controls how greedy the solution qk (a|s) is with respect
+to its associated objective Qk (s, a). For example, given a
+batch of state-action pairs, at the extremes, an αk of zero
+would give all probability to the state-action pair with the
+maximum Q-value, while an αk of positive infinity would
+give the same probability to all state-action pairs. In order
+to automatically optimize for αk , we plug the exponential
+transformation into (30), which leads to
+Z
+Z
+qk (a|s) = argmax µ(s) q(a|s)Qk (s, a) da ds−
+q
+Z
+αk µ(s) KL(q(a|s) k πθ0 (a|s)) ds . (31)
+If we instead enforce the bound on KL divergence as a hard
+constraint (which we do in practice), that leads to:
+Z
+Z
+qk (a|s) = argmax µ(s) q(a|s)Qk (s, a) da ds (32)
+q
+Z
+s.t. µ(s) KL(q(a|s) k πθ0 (a|s)) ds < k ,
+where, as described in the main paper, the parameter k
+defines preferences over objectives. If we now assume that
+qk (a|s) is a non-parametric sample-based distribution as in
+(Abdolmaleki et al., 2018b), we can solve this constrained
+
+optimization problem in closed form for each sampled state
+s, by setting
+q(a|s) ∝ πθ0 (a|s) exp
+
+ Q (s, a) 
+k
+
+ηk
+
+,
+
+(33)
+
+where ηk is computed by solving the following convex dual
+function:
+ηk = argmin ηk +
+(34)
+η
+Z
+Z
+ Q (s, a) 
+k
+η µ(s) log πθ0 (a|s) exp
+da ds .
+η
+Equations (32), (33), and (34) are equivalent to those given
+for the first step of multi-objective policy improvement in
+the main paper (Sec. 4.2.1). Please see refer to Appendix
+D.2 in (Abdolmaleki et al., 2018b) for details on derivation
+of the dual function.
+E.2. M-Step
+After obtaining the variational distributions qk (a|s) for
+each
+lower bound for
+PN objective k, we have found a tight
+0
+log
+p
+(R
+=
+1)
+when
+θ
+=
+θ
+.
+We
+can now obtain
+θ
+k
+k=1
+the parameters θ of the updated policy πθ (a|s) by optimizing this lower bound. After rearranging and dropping the
+terms in (27) that do not involve θ, we obtain
+θ ∗ = argmax
+θ
+
+N Z
+X
+
+Z
+µ(s)
+
+qk (a|s) log πθ (a|s) da ds
+
+k=1
+
++ log p(θ).
+This corresponds to the supervised learning step of policy
+improvement in the main paper (Sec. 4.2.2).
+For the prior p(θ) on the parameters θ, we enforce that the
+new policy πθ (a|s) is close to the target policy πθ0 (a|s).
+We therefore optimize for
+θ ∗ = argmax
+θ
+
+Z
+s.t.
+
+N Z
+X
+
+Z
+µ(s)
+
+qk (a|s) log πθ (a|s) da ds
+
+k=1
+
+µ(s) KL(πθ0 (a|s) k πθ (a|s)) ds < β.
+
+Because of the constraint on the change of the parametric
+policy, we do not greedily optimize the M-step objective.
+See (Abdolmaleki et al., 2018b) for more details.
+
+
