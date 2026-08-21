@@ -3,7 +3,7 @@
 Compiled: 2026-08-02
 Purpose: Reference collection for Q1 paper on vision-guided Multi-Objective Reinforcement Learning (MORL) with a UR5 in a dynamic environment.
 
-## Papers / references (23 total)
+## Papers / references (27 total)
 
 ### MORL theory, algorithms, and benchmarks
 
@@ -37,6 +37,8 @@ Purpose: Reference collection for Q1 paper on vision-guided Multi-Objective Rein
 | `references/07-diffusion-policy.md` | Diffusion Policy | RSS 2023 / IJRR 2024 | Core visuomotor diffusion baseline; tested on UR5 hardware. |
 | `references/20-aloha-unleashed.md` | ALOHA Unleashed | — (DeepMind) | Large-scale teleop + Diffusion Policy recipe; bimanual 6-DoF arms. |
 | `references/22-videomanip.md` | VideoManip | — | Device-free dexterous manipulation from RGB videos; uses DP3 policy. |
+| `references/25-doughnet.md` | DoughNet | ECCV 2024 | Visual predictive model for topological manipulation of deformable objects from a single RGBD point cloud. |
+| `references/27-im2flow2act.md` | Flow as the Cross-domain Manipulation Interface (Im2Flow2Act) | CoRL 2024 | Object-flow interface bridging human/robot and real/sim; 81% avg success across rigid/articulated/deformable tasks. |
 
 ### Vision-language models & affordance-driven manipulation
 
@@ -47,11 +49,18 @@ Purpose: Reference collection for Q1 paper on vision-guided Multi-Objective Rein
 | `references/23-vrb.md` | VRB: Affordances from Human Videos | CVPR 2023 | Affordance action parameterization for RL; human-video-driven learning. |
 | `references/19-vision-tactile-manipulation.md` | Vision-based Tactile Manipulation | — | Tactile+vision fusion for soft/fragile object handling. |
 
+### Cross-embodiment datasets & generalist models
+
+| File | Paper | Venue | Why it matters |
+|------|-------|-------|----------------|
+| `references/26-open-x-embodiment.md` | Open X-Embodiment / RT-X | arXiv 2310.08864 | 1M+ trajectories, 22 embodiments, 21 institutions; RT-X positive transfer; RT-2-X emergent skills. |
+
 ### Data collection / demonstration tools
 
 | File | Paper | Venue | Why it matters |
 |------|-------|-------|----------------|
 | `references/03-iris-project.md` | IRIS: An Immersive Robot Interaction System | CoRL 2025 | XR teleop + point clouds across simulators and robots. |
+| `references/24-umi.md` | Universal Manipulation Interface (UMI) | RSS 2024 | Hand-held gripper in-the-wild data collection; hardware-agnostic policies deployed on UR5e and Franka. |
 
 ## Suggested taxonomy for your literature review
 
@@ -68,12 +77,15 @@ Purpose: Reference collection for Q1 paper on vision-guided Multi-Objective Rein
    - ALOHA / ACT (RSS 2023); Mobile ALOHA / ACT++ (CoRL 2024).
    - ALOHA Unleashed (Diffusion Policy + large-scale teleop recipe).
    - VideoManip (RGB-video-driven dexterous manipulation, DP3 policy).
+   - Im2Flow2Act (CoRL 2024) — object flow as cross-domain interface (human/robot, real/sim).
+   - DoughNet (ECCV 2024) — visual predictive model for topological manipulation of deformable objects.
 
 3. Vision-Language Models & Affordances for Manipulation
    - GPT-4V for Robotics (Microsoft) — VLM task planning from demos.
    - Manipulate-Anything — VLM automated data generation, zero-shot.
    - VRB (CVPR 2023) — affordances from human videos for RL.
    - Vision-based Tactile Manipulation — tactile+vision fusion.
+   - Open X-Embodiment / RT-X (arXiv 2310.08864) — RT-2-X vision-language-action model over a cross-embodiment dataset.
 
 4. Vision + Multi-Objective Decision-Making (your core intersection)
    - DOL (image-based MORL, first deep MORL).
@@ -83,16 +95,18 @@ Purpose: Reference collection for Q1 paper on vision-guided Multi-Objective Rein
 
 5. Data Collection & Sim-to-Real Support
    - IRIS (CoRL 2025) — XR teleop, point-cloud integration, multi-simulator.
+   - UMI (RSS 2024) — hand-held gripper in-the-wild data collection; hardware-agnostic policies.
+   - Open X-Embodiment (arXiv 2310.08864) — 1M+ real robot trajectories across 22 embodiments.
    - Demo-enhanced MORL nav (IROS 2025) — sim-to-real on two robots.
 
 ## Reading order suggestion
 
 1. `01-mo-gymnasium.md`, `12-morl-baselines.md`, `13-pgmorl.md`, `16-envelope-morl.md` — establish the MORL side and baselines.
-2. `07-diffusion-policy.md`, `04-3d-diffusion-policy.md`, `20-aloha-unleashed.md` — establish the vision-guided policy side.
+2. `07-diffusion-policy.md`, `04-3d-diffusion-policy.md`, `20-aloha-unleashed.md`, `24-umi.md`, `27-im2flow2act.md`, `25-doughnet.md` — establish the vision-guided policy side (diffusion/BC baselines, cross-domain interfaces, deformable objects).
 3. `10-prc-cmorl.md`, `08-gcr-ppo.md`, `09-mo-playground.md` — recent robot-focused MORL methods (parallel scale, constraints).
 4. `14-pareto-visual-navigation.md`, `11-demo-enhanced-morl-nav.md`, `15-dol.md` — the vision+MORL intersection (your core novelty area).
 5. `18-gpt4v-robot-manipulation.md`, `21-manipulate-anything.md`, `23-vrb.md`, `22-videomanip.md` — VLM/affordance-driven and video-driven manipulation.
-6. `05-aloha.md`, `06-mobile-aloha.md`, `03-iris-project.md`, `19-vision-tactile-manipulation.md` — baselines and data-collection tooling.
+6. `26-open-x-embodiment.md`, `05-aloha.md`, `06-mobile-aloha.md`, `03-iris-project.md`, `19-vision-tactile-manipulation.md` — cross-embodiment datasets, baselines and data-collection tooling.
 
 ## Open gaps to fill next
 

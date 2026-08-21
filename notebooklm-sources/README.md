@@ -20,6 +20,10 @@ Plain-text extracts of the papers for uploading to NotebookLM. Generated 2026-08
 | `tier2/08-gcr-ppo.txt` | Scalable Multi-Objective Robot RL through Gradient Conflict Resolution |
 | `tier2/14-pareto-visual-navigation.txt` | Navigating the Wild: Pareto-Optimal Visual Decision-Making in Image Space |
 | `tier2/16-envelope-morl.txt` | A Generalized Algorithm for MORL and Policy Adaptation |
+| `tier2/24-umi.txt` | Universal Manipulation Interface (UMI) |
+| `tier2/25-doughnet.txt` | DoughNet: A Visual Predictive Model for Topological Manipulation of Deformable Objects |
+| `tier2/26-open-x-embodiment.txt` | Open X-Embodiment: Robotic Learning Datasets and RT-X Models |
+| `tier2/27-im2flow2act.txt` | Flow as the Cross-domain Manipulation Interface (Im2Flow2Act) |
 
 ## Upload tips
 - Upload each `.txt` as a separate source in NotebookLM.
