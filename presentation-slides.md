@@ -315,18 +315,18 @@ M10-M12  Writing + Q1 journal submission
 
 ## S16 — References
 
-**Text (top 7 cited):**
+**Text (top 7 cited, most-relevant-first):**
 ```
-[1] Felten et al., "A Toolkit for Reliable Benchmarking and Research in
-    MORL," NeurIPS 2023.
-[2] Xu et al., "Prediction-Guided MORL for Continuous Robot Control," ICML 2020.
+[1] de Heuvel et al., "Demo-Enhanced Adaptable Multi-Objective Robot
+    Navigation," IROS 2025.
+[2] Munn et al., "Scalable Multi-Objective Robot RL through Gradient
+    Conflict Resolution," arXiv 2509.14816, 2025.
 [3] Chi et al., "Diffusion Policy: Visuomotor Policy Learning via Action
     Diffusion," RSS 2023 / IJRR 2024.
 [4] Ze et al., "3D Diffusion Policy," RSS 2024.
-[5] Yang et al., "A Generalized Algorithm for MORL and Policy Adaptation," NeurIPS 2019.
-[6] He et al., "Personalized Robotic Control via Constrained MORL," Neurocomputing 2023.
-[7] de Heuvel et al., "Demo-Enhanced Adaptable Multi-Objective Robot
-    Navigation," IROS 2025.
+[5] Xu et al., "Prediction-Guided MORL for Continuous Robot Control," ICML 2020.
+[6] Yang et al., "A Generalized Algorithm for MORL and Policy Adaptation," NeurIPS 2019.
+[7] He et al., "Personalized Robotic Control via Constrained MORL," Neurocomputing 2023.
 ```
 
 **Visual:** none — text slide; full list in `references/`.
@@ -346,6 +346,6 @@ M10-M12  Writing + Q1 journal submission
 | S12 tiles | Metric + baseline icons | Draw yourself |
 | S15 | Gantt chart | Excel/Lucidchart |
 
-## NotebookLM sources (unchanged)
-Tier 1: 07-diffusion-policy, 13-pgmorl, 01-mo-gymnasium, 10-prc-cmorl, 11-demo-enhanced-morl-nav
-Tier 2: 04-3d-diffusion-policy, 16-envelope-morl, 02-mo-mpo, 14-pareto-visual-navigation, 08-gcr-ppo
+## NotebookLM sources (reordered by relevance 2026-08-21)
+Tier 1 (core): 11-demo-enhanced-morl-nav, 08-gcr-ppo, 07-diffusion-policy, 04-3d-diffusion-policy, 10-prc-cmorl
+Tier 2 (supporting): 14-pareto-visual-navigation, 16-envelope-morl, 02-mo-mpo, 13-pgmorl, 01-mo-gymnasium, 24-umi, 27-im2flow2act, 25-doughnet, 26-open-x-embodiment

@@ -100,6 +100,6 @@ Audience: Thesis proposal defense (focus = research gap + contribution, NOT comp
 - "Problem Statement" -> S4; "Background" -> S5; "Expected Results" -> S8 (evaluation plan).
 - Removed: Technical Specifications table, Results/Performance (not needed in a proposal).
 
-## NotebookLM sources (unchanged)
-Tier 1: 07-diffusion-policy, 13-pgmorl, 01-mo-gymnasium, 10-prc-cmorl, 11-demo-enhanced-morl-nav
-Tier 2: 04-3d-diffusion-policy, 16-envelope-morl, 02-mo-mpo, 14-pareto-visual-navigation, 08-gcr-ppo
+## NotebookLM sources (reordered by relevance 2026-08-21)
+Tier 1 (core): 11-demo-enhanced-morl-nav, 08-gcr-ppo, 07-diffusion-policy, 04-3d-diffusion-policy, 10-prc-cmorl
+Tier 2 (supporting): 14-pareto-visual-navigation, 16-envelope-morl, 02-mo-mpo, 13-pgmorl, 01-mo-gymnasium, 24-umi, 27-im2flow2act, 25-doughnet, 26-open-x-embodiment
