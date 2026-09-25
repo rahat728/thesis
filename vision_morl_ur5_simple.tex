@@ -1,0 +1,620 @@
+\documentclass[11pt,a4paper]{article}
+
+% ============================================================
+% PACKAGES
+% ============================================================
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{mathptmx}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{microtype}
+
+% ============================================================
+% STYLE
+% ============================================================
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\setlength{\tabcolsep}{5pt}
+
+% ============================================================
+% DOCUMENT
+% ============================================================
+\begin{document}
+
+% ------------------------------------------------------------
+% TITLE
+% ------------------------------------------------------------
+\begin{center}
+  {\LARGE\bfseries Vision-Guided Multi-Objective Reinforcement
+  Learning\\[0.1em] for UR5 Manipulation}\\[0.4em]
+  {\large Project Overview and Expected Results}\\
+  \vspace{0.2em}
+  {\small Research proposal summary}
+\end{center}
+
+\vspace{0.4em}
+\noindent\rule{\linewidth}{1pt}
+\vspace{0.6em}
+
+% ------------------------------------------------------------
+% ABSTRACT
+% ------------------------------------------------------------
+\begin{abstract}
+Real-world robot manipulation requires a robot to achieve its task while
+balancing conflicting objectives such as task success, energy consumption,
+movement smoothness, and safety. The literature provides each of the
+required capabilities --- vision-guided control, multi-objective
+reinforcement learning (MORL), 6-DoF manipulation, preference
+conditioning, and safety as a constraint --- but no existing system
+combines all of them on an articulated arm operating in dynamic scenes.
+This project proposes a preference-conditioned, vision-guided
+multi-objective policy for a UR5 robot, built on a 3D point-cloud
+representation, a multi-objective critic, a diffusion-based visuomotor
+policy, and a constrained-MDP formulation of safety. The expected
+outcomes, including a target of at least 70\% static success on the real
+robot and a hypervolume at or above existing MORL baselines, are
+hypotheses to be confirmed by experiment rather than measured results.
+\end{abstract}
+
+% ------------------------------------------------------------
+% 1. INTRODUCTION
+% ------------------------------------------------------------
+\section{Introduction and Motivation}
+
+The immediate stimulus for this project is that two otherwise mature
+research lines --- multi-objective reinforcement learning and
+vision-guided manipulation --- have developed largely independently.
+MORL methods provide principled tools for balancing several rewards,
+while visuomotor policy learning has delivered strong results on
+contact-rich arm control. What is missing is their integration into a
+single system with the following five properties:
+
+\begin{enumerate}
+  \item \textbf{Vision:} RGB-D / point-cloud observations of the scene.
+  \item \textbf{MORL:} vector rewards and a Pareto-optimal solution set.
+  \item \textbf{Manipulation:} contact-rich, 6-DoF arm control.
+  \item \textbf{Preference conditioning:} runtime modification of
+  behavior via a preference vector $\lambda$, without retraining.
+  \item \textbf{Safety as a constraint:} collision, velocity, and
+  workspace limits expressed as a constrained MDP (CMDP), separate from
+  the preference trade-off.
+\end{enumerate}
+
+The objective is to obtain one trained policy that observes the scene,
+acts on the arm, and whose trade-off among success, energy, and
+smoothness can be changed at run time --- all while respecting hard
+safety limits.
+
+% ------------------------------------------------------------
+% 2. LITERATURE REVIEW
+% ------------------------------------------------------------
+\section{Literature Review}
+
+The review summarizes the relevant methods in five thematic threads and
+then identifies the research gap. Numerical values quoted below are those
+reported by the cited publications.
+
+% -------- 2.1 --------
+\subsection{Multi-Objective Reinforcement Learning}
+
+The MORL literature supplies the algorithmic basis for policies that
+balance multiple objectives.
+
+\textbf{Envelope MOQ} \cite{yang2019} trains a single network
+$Q(s,a,\omega)$ over the preference space. Its envelope Bellman operator
+and hindsight experience replay provide the foundation for
+single-policy preference conditioning.
+
+\textbf{PGMORL} \cite{xu2020} maintains a population of PPO policies
+trained under different preference vectors, guided toward the Pareto
+front by a Gaussian-process prediction model. Solutions are evaluated by
+hypervolume and sparsity.
+
+\textbf{MO-MPO} \cite{abdolmaleki2022} replaces direct scalar weighting
+with per-objective KL budgets, yielding a scale-invariant treatment of
+multiple objectives.
+
+\textbf{DOL} \cite{mossalam} demonstrates multi-objective learning with
+image observations in the ImageDeepSea environment; the visual setting is
+a toy grid rather than a camera-based manipulation problem.
+
+\textbf{MO-Gymnasium} \cite{felten2023} provides the standard
+vector-reward interface for multi-objective environments, which the
+proposed benchmark adopts.
+
+\textit{Limitation.} These methods form the MORL foundation, but none
+simultaneously addresses visual 6-DoF manipulation in dynamic scenes with
+explicit safety constraints.
+
+% -------- 2.2 --------
+\subsection{Vision-Guided Robot Manipulation}
+
+Vision-guided manipulation has advanced rapidly through imitation and
+visuomotor policy learning.
+
+\textbf{Diffusion Policy} \cite{chi2023} represents the policy as a
+conditional diffusion process over action sequences. Its reported UR5
+setup uses $T_o=2$, $T_p=16$, and $T_a=8$, a 10\,Hz policy with 125\,Hz
+interpolation, a Cartesian velocity limit of $<0.43$\,m/s, and a
+workspace position at least 1\,cm above the table.
+
+\textbf{3D Diffusion Policy (DP3)} \cite{ze2024} learns manipulation from
+sparse point clouds of 512 or 1024 points, reporting a 24.2\% relative
+gain over image-based baselines across 72 simulation tasks and 85\%
+real-robot success with 40 demonstrations.
+
+\textbf{ACT / ALOHA} \cite{zhao2023}, \textbf{Mobile ALOHA} \cite{fu2024},
+\textbf{UMI} \cite{chi2024}, and \textbf{IRIS} \cite{jiang2025}
+are further demonstration-based visuomotor manipulation systems.
+
+\textit{Limitation.} These approaches primarily optimize a single task
+objective and provide no runtime mechanism for changing the trade-off
+among multiple objectives.
+
+% -------- 2.3 --------
+\subsection{Robot-Scale Multi-Objective RL}
+
+\textbf{GCR-PPO} \cite{munn2025} is the closest algorithmic analogue of
+the proposed multi-objective critic. It uses a multi-head critic
+$V_{\phi}:S\rightarrow\mathbb{R}^{K}$ with component-wise generalized
+advantage estimation, ratio-preserving advantage normalization, and
+asymmetric PCGrad. The method reports a $\sim$4.55\% average return gain
+over PPO, with gains up to 9.5\% on multi-objective suites.
+
+These values are treated in this project only as an \emph{algorithmic
+reference} for the order of magnitude of improvement; they are not adopted
+as numerical targets for the UR5 system. GCR-PPO operates on
+proprioceptive observations and does not combine a visual encoder,
+runtime preference conditioning, or CMDP safety.
+
+% -------- 2.4 --------
+\subsection{Safety-Constrained MORL}
+
+\textbf{PRC-CMORL} \cite{he2023} formulates multi-objective robotic
+control as a constrained MDP. Its key distinction is that a
+\emph{safety objective} is not the same as a \emph{safety constraint}:
+if safety enters only as a reward term, the policy may trade safety away
+for performance when $\lambda$ changes. A CMDP instead requires the
+safety limits to be satisfied explicitly, for example
+
+\begin{equation}
+d(s,O)\geq D_{\mathrm{safe}},\qquad
+\|\dot{x}\|<0.43~\mathrm{m/s}.
+\end{equation}
+
+In the proposed system the preference vector therefore controls only the
+task-objective trade-off among success, energy, and smoothness, while
+safety is handled separately as a constraint.
+
+% -------- 2.5 --------
+\subsection{Closest Intersections: Vision and MORL}
+
+\textbf{Demonstration-enhanced adaptable multi-objective navigation}
+\cite{deheuvel2025} is the closest combination of MORL, preference
+conditioning, dynamic environments, and sim-to-real transfer. It employs a
+preference interpolator $I(\lambda)=\lambda^{p}$ and adapts the
+preference at runtime without retraining. However, it uses lidar-based
+wheeled navigation rather than visual 6-DoF manipulation, and collision is
+treated as a sparse objective rather than a CMDP constraint.
+
+\textbf{POVNav} \cite{pushp2025} combines Pareto reasoning with visual
+input and explicit safety constraints, but its focus is classical
+navigation planning rather than a learned preference-conditioned
+manipulation policy.
+
+% -------- 2.6 --------
+\subsection{Research Gap}
+
+The literature thus supplies the individual building blocks described
+above, while the combined system remains unaddressed:
+
+\begin{center}
+\textbf{Vision + MORL + 6-DoF Manipulation\\
++ Preference Conditioning + CMDP Safety}
+\end{center}
+
+on a UR5 arm in static and dynamic environments. The following summary
+tables make the gap explicit. Capability comparison:
+
+\renewcommand{\arraystretch}{1.25}
+{\small
+\begin{tabular}{l c c c c c c}
+\toprule
+\textbf{Method} & \textbf{Vision} & \textbf{MORL} &
+\textbf{Dynamic} & \textbf{Manip.} & \textbf{Preference} &
+\textbf{Safety} \\
+\midrule
+Envelope MOQ (2019) & $\times$ & \checkmark & $\times$ & $\times$
+& \checkmark & $\times$ \\
+PGMORL (2020) & $\times$ & \checkmark & $\times$ & $\times$
+& \checkmark & $\times$ \\
+MO-MPO (2022) & $\times$ & \checkmark & $\times$ & partial
+& \checkmark & $\times$ \\
+Diffusion Policy (2023) & \checkmark & $\times$ & \checkmark &
+\checkmark & $\times$ & partial \\
+DP3 (2024) & \checkmark & $\times$ & \checkmark & \checkmark &
+$\times$ & empirical \\
+ACT / ALOHA (2023) & \checkmark & $\times$ & \checkmark &
+\checkmark & $\times$ & $\times$ \\
+GCR-PPO (2025) & $\times$ & \checkmark & partial & \checkmark &
+$\times$ & $\times$ \\
+PRC-CMORL (2023) & $\times$ & \checkmark & $\times$ & $\times$ &
+\checkmark & \checkmark \\
+MORL navigation (2025) & lidar & \checkmark & \checkmark & $\times$ &
+\checkmark & $\times$ \\
+POVNav (2025) & \checkmark & classical & \checkmark & $\times$ &
+partial & \checkmark \\
+\textbf{This work} & \textbf{\checkmark} & \textbf{\checkmark} &
+\textbf{\checkmark} & \textbf{\checkmark} & \textbf{\checkmark} &
+\textbf{\checkmark} \\
+\bottomrule
+\end{tabular}}
+
+\vspace{0.6em}
+What each field provides and what remains:
+
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{@{}l X X@{}}
+\toprule
+\textbf{Research area} & \textbf{What it provides} &
+\textbf{Remaining gap} \\
+\midrule
+MORL & Pareto optimization & Limited visual manipulation \\
+Vision manipulation & Visual 6-DoF control & Mostly single-objective \\
+GCR-PPO & Multi-objective critic & No visual preference-conditioned
+UR5 \\
+PRC-CMORL & Safety constraints & No visual manipulation \\
+MORL navigation (2025) & Preference adaptation in dynamic scenes &
+Navigation rather than manipulation \\
+POVNav & Visual Pareto planning + safety & Classical navigation
+planning \\
+\textbf{This work} & \textbf{Combines all five} &
+\textbf{UR5 dynamic manipulation} \\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.6em}
+The proposed study therefore investigates this combination on a UR5 in
+static and dynamic scenes.
+
+% -------- 2.7 --------
+\subsection{Positioning Relative to Vision-Guided Baselines}
+
+The vision-guided methods reviewed above are the \emph{visual-manipulation
+foundation} (the adopted backbone) of the proposed system, while the MORL
+methods form its \emph{algorithmic foundation}. The proposed approach does
+not reproduce their single-objective benchmarks; it evaluates on different
+criteria. This yields two distinct classes of claims.
+
+\emph{Where the proposed approach can improve on these works:}
+\begin{itemize}
+  \item \textbf{Dynamic scenes.} The vision-guided works largely target
+  static-scene manipulation. The proposed benchmark adds a moving
+  obstacle, a moving target, and sudden appearance, which those methods
+  do not handle as a learned behavior.
+  \item \textbf{One model, many behaviors.} They return a single fixed
+  trade-off. The proposed policy produces a Pareto set of behaviors and
+  lets the user select among them at run time.
+  \item \textbf{Runtime preference, no retraining.} None of the
+  vision-guided methods offers preference conditioning; the proposed
+  policy changes its success--energy--smoothness trade-off without
+  retraining.
+  \item \textbf{Explicit safety.} Their safety handling is empirical or
+  partial. The CMDP formulation yields explicit guarantees, evaluated as
+  measurable violations (static $\approx 0\%$).
+  \item \textbf{Controlled attribution.} The proposed evaluation isolates
+  the effect of the multi-objective critic, the preference input, and the
+  safety constraint (C3), which the vision-guided works do not provide.
+\end{itemize}
+
+\emph{Where the proposed approach does not claim to outperform them:}
+\begin{itemize}
+  \item \textbf{Raw static success.} DP3 is adopted as the backbone, so
+  beating its 85\% real success is not claimed; the static target of
+  $\geq 70\%$ is deliberately lower because the system also optimizes
+  energy, smoothness, and safety.
+  \item \textbf{Representation gain.} The $+24.2\%$ point-cloud advantage
+  is inherited from the backbone, not improved.
+  \item \textbf{Cross-benchmark comparability.} Different tasks, sensors,
+  and data scale prevent a direct numerical comparison with their
+  published numbers.
+\end{itemize}
+
+In short, the defensible claim is: \emph{better under multi-objective,
+preference, and safety criteria on a dynamic benchmark --- not higher
+single-objective success than the vision baselines}.
+
+% -------- 2.8 --------
+\subsection{Overall Contribution: From MORL to This Work}
+
+The overall contribution of the paper is best explained as a chain of
+three stages: the field of multi-objective reinforcement learning, its
+robot-scale realization, and the proposed unification. Each stage
+contributes a capability and leaves a limitation that the next stage
+addresses.
+
+\emph{Stage 1 --- Contribution of MORL.}
+The MORL field supplies the principled formulation of multi-objective
+control: vector rewards, Pareto-optimal solution sets, and
+preference-conditioned policies (Envelope MOQ, PGMORL, MO-MPO), together
+with a standard benchmark interface (MO-Gymnasium).
+\textit{Limitation carried forward:} these results are demonstrated
+mostly in abstract or toy settings, without visual 6-DoF manipulation,
+dynamic scenes, or explicit constraints.
+
+\emph{Stage 2 --- Contribution of robot-scale MORL.}
+This stage scales MORL to realistic robot-learning problems. GCR-PPO
+provides a multi-head critic (per-objective value heads, component-wise
+GAE, ratio-preserving advantage normalization, asymmetric PCGrad) with
+$\sim$4.55\% average and up to 9.5\% return gains, and the IROS 2025
+navigation work demonstrates runtime preference adaptation.
+\textit{Limitation carried forward:} proprioceptive or lidar inputs only;
+no vision-guided manipulation; collision treated as an objective rather
+than a CMDP constraint.
+
+\emph{Stage 3 --- Contribution of this work.}
+The paper unifies the two stages into a single system:
+\begin{itemize}
+  \item \textbf{C1:} a preference-conditioned, vision-guided MORL policy
+  --- DP3 point-cloud backbone, multi-objective critic, and diffusion
+  policy --- with runtime $\lambda$ and no retraining;
+  \item \textbf{C2:} a multi-objective UR5 benchmark (static scene plus
+  three dynamic scenes) wrapped in MO-Gymnasium;
+  \item \textbf{C3:} a controlled evaluation that separates the effects
+  of multi-objective learning, preference conditioning, the visual
+  representation, and safety, together with an explicit sim-to-real study.
+\end{itemize}
+
+\emph{Limitation resolved:} the UR5 static-and-dynamic manipulation
+setting that the earlier stages leave open.
+
+The contribution chain is summarized below.
+
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X
+>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Stage} & \textbf{Contribution} &
+\textbf{Limitation carried forward} \\
+\midrule
+MORL field & Multi-objective formulation, Pareto sets, preference tools
+& Not demonstrated on visual robots \\
+Robot-scale MORL & Critic/GAE/PCGrad machinery; runtime preference
+adaptation & No vision-guided manipulation; safety as objective \\
+\textbf{This work} & \textbf{Unify MORL + robot scale + vision + CMDP on
+a UR5} & \textbf{UR5 static--dynamic manipulation (the gap)} \\
+\bottomrule
+\end{tabularx}
+
+% ------------------------------------------------------------
+% 3. PROPOSED METHOD
+% ------------------------------------------------------------
+\section{Proposed Method}
+
+\begin{enumerate}
+  \item \textbf{Visual representation.} A DP3-style point-cloud encoder
+  reduces the RGB-D observation to 512 points. The policy is warm-started
+  from 10--20 demonstrations per task.
+  \item \textbf{Multi-objective critic.} One value head per objective,
+  trained with per-objective generalized advantage estimation,
+  ratio-preserving advantage normalization, and asymmetric PCGrad to
+  mitigate conflicting gradients.
+  \item \textbf{Preference-conditioned policy.} A diffusion-based
+  visuomotor policy conditioned on the runtime preference vector
+  $\lambda=(\lambda_{\mathrm{success}},\lambda_{\mathrm{energy}},
+  \lambda_{\mathrm{smoothness}})$, so the trade-off can be changed
+  without retraining.
+  \item \textbf{CMDP safety.} Constraints $d(s,O)\geq D_{\mathrm{safe}}$
+  and $\|\dot{x}\|<0.43$\,m/s are enforced separately from
+  $\lambda$.
+  \item \textbf{Benchmark.} A new UR5 multi-objective benchmark following
+  the MO-Gymnasium interface, with one static scene and three dynamic
+  scenes (moving obstacle, moving target, sudden appearance), so that all
+  baselines share the same interface and conditions.
+  \item \textbf{Evaluation.} Simulation and real-robot training are run
+  in parallel so that the sim-to-real gap is measured explicitly for every
+  reported metric.
+\end{enumerate}
+
+% ------------------------------------------------------------
+% 4. EXPECTED RESULTS
+% ------------------------------------------------------------
+\section{Expected Results vs. Reported Results}
+
+The following table places the measured results reported in the
+literature beside the expected outcomes of this study.
+
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X
+>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Quantity} & \textbf{Reported result (measured, source)} &
+\textbf{Proposed target (expected)} \\
+\midrule
+Point cloud & 512 or 1024 points (DP3 \cite{ze2024}) & 512 points \\
+Demonstrations & 10--20 per task (DP3 \cite{ze2024}) & 10--20
+(warm-start) \\
+Real-robot success & 85\% with 40 demos (DP3 \cite{ze2024}) &
+$\geq 70\%$ (static target) \\
+Point cloud vs.\ images & $+24.2\%$ relative (DP3 \cite{ze2024}) &
+Representation choice, not a gain target \\
+Control loop & 125\,Hz (Diffusion Policy \cite{chi2023}) &
+125\,Hz \\
+Cartesian velocity & $<0.43$\,m/s (Diffusion Policy \cite{chi2023}) &
+$<0.43$\,m/s (constraint) \\
+Multi-objective gain & $\sim 4.55\%$ avg / $\le 9.5\%$ max
+(GCR-PPO \cite{munn2025}) & Reference only; we report our own values \\
+Pareto quality & PGMORL / Envelope MOQ hypervolume
+\cite{xu2020,yang2019} & Hypervolume reaches or exceeds those
+baselines \\
+Safety & CMDP constraint (PRC-CMORL \cite{he2023}) & Static violations
+$\approx 0\%$; dynamic lower than baseline \\
+Preference change & Retraining or separate policies (baselines) &
+3--5 settings, same policy, no retraining \\
+Simulation success & --- & $\sim 92\%$ (simulation reference) \\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.6em}
+\textbf{Note.} Values in the ``Proposed target'' column are expected
+outcomes of this study and must be confirmed by experiment; they are not
+measured results. After the experimental phase, each expected value will
+be replaced by its measured counterpart.
+
+% ------------------------------------------------------------
+% 5. RESEARCH QUESTIONS
+% ------------------------------------------------------------
+\section{Research Questions and Expected Outcomes}
+
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X
+>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Question} & \textbf{Comparison} & \textbf{Expected outcome} \\
+\midrule
+Q1: Can the visual representation support learning?
+& Proposed system vs.\ single-objective DP3 / PPO &
+$\sim 92\%$ in simulation; $\geq 70\%$ real static success \\
+Q2: Does the multi-objective critic help?
+& Multi-objective critic vs.\ scalarized (single-number) PPO &
+Higher hypervolume / better Pareto front; not a fixed percentage gain \\
+Q3: Does runtime preference conditioning work?
+& Continuous $\lambda$ vs.\ fixed $\lambda$ &
+Same policy, measurably different behavior, no retraining \\
+Q4: Does CMDP safety reduce violations?
+& CMDP vs.\ collision-as-reward &
+Static violations $\approx 0\%$; dynamic violations strictly below the
+reward baseline \\
+\bottomrule
+\end{tabularx}
+
+% ------------------------------------------------------------
+% 6. EXPERIMENTAL PLAN
+% ------------------------------------------------------------
+\section{Experimental Plan (UR5)}
+
+\begin{enumerate}
+  \item Control cadence of 125\,Hz with the policy updated at 10\,Hz and
+  interpolated; Cartesian velocity capped below 0.43\,m/s.
+  \item Three to five preference settings exercised on the real arm,
+  without retraining between settings.
+  \item Real static success target of at least 70\%.
+  \item Success, energy, smoothness, and safety violations reported
+  separately for the real robot.
+  \item Sim-to-real differences reported per metric (success, energy,
+  smoothness, safety).
+\end{enumerate}
+
+% ------------------------------------------------------------
+% 7. EVALUATION CRITERIA
+% ------------------------------------------------------------
+\section{Evaluation Criteria}
+
+\begin{itemize}
+  \item \textbf{Visual learning.} $\sim 92\%$ simulation and
+  $\geq 70\%$ real static success.
+  \item \textbf{MORL benefit.} Hypervolume above the scalarized baseline.
+  \item \textbf{Runtime preference.} 3--5 $\lambda$ settings produce
+  measurably different behavior from a single trained policy.
+  \item \textbf{Pareto quality.} Hypervolume at or above PGMORL and
+  Envelope MOQ on the same benchmark.
+  \item \textbf{Safety.} Static violations $\approx 0\%$; dynamic
+  violations strictly below the collision-as-objective baseline.
+\end{itemize}
+
+% ------------------------------------------------------------
+% 8. REFERENCES
+% ------------------------------------------------------------
+\section{References}
+
+\begin{thebibliography}{15}
+
+\bibitem{yang2019}
+R.~Yang \emph{et al.},
+``A Generalized Algorithm for Multi-Objective Reinforcement Learning
+and Policy Adaptation,''
+NeurIPS, 2019.
+
+\bibitem{xu2020}
+J.~Xu \emph{et al.},
+``Prediction-Guided Multi-Objective Reinforcement Learning for
+Continuous Robot Control,''
+ICML, 2020.
+
+\bibitem{abdolmaleki2022}
+A.~Abdolmaleki \emph{et al.},
+``A Distributional View on Multi-Objective Policy Optimization,''
+NeurIPS, 2022.
+
+\bibitem{mossalam}
+H.~Mossalam \emph{et al.},
+``Multi-Objective Deep Reinforcement Learning.''
+
+\bibitem{felten2023}
+F.~Felten \emph{et al.},
+``MO-Gymnasium: A Toolkit for Reliable Benchmarking and Research in
+Multi-Objective Reinforcement Learning,''
+NeurIPS, 2023.
+
+\bibitem{chi2023}
+C.~Chi \emph{et al.},
+``Diffusion Policy: Visuomotor Policy Learning via Action Diffusion,''
+RSS, 2023; IJRR, 2024.
+
+\bibitem{ze2024}
+Y.~Ze \emph{et al.},
+``3D Diffusion Policy: Generalizable Visuomotor Policy Learning via
+Simple 3D Representations,''
+RSS, 2024.
+
+\bibitem{zhao2023}
+T.~Zhao \emph{et al.},
+``Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware
+(ALOHA / ACT),''
+RSS, 2023.
+
+\bibitem{fu2024}
+Z.~Fu \emph{et al.},
+``Mobile ALOHA: Learning Bimanual Mobile Manipulation with Low-Cost
+Whole-Body Teleoperation,''
+CoRL, 2024.
+
+\bibitem{chi2024}
+C.~Chi \emph{et al.},
+``Universal Manipulation Interface (UMI),''
+RSS, 2024.
+
+\bibitem{jiang2025}
+Y.~Jiang \emph{et al.},
+``IRIS: An Immersive Robot Interaction System,''
+CoRL, 2025.
+
+\bibitem{munn2025}
+M.~Munn \emph{et al.},
+``Scalable Multi-Objective Robot RL through Gradient Conflict
+Resolution,''
+arXiv:2509.14816, 2025.
+
+\bibitem{he2023}
+X.~He \emph{et al.},
+``Personalized Robotic Control via Constrained Multi-Objective
+Reinforcement Learning,''
+Neurocomputing, 2023.
+
+\bibitem{deheuvel2025}
+J.~de Heuvel \emph{et al.},
+``Demonstration-Enhanced Adaptable Multi-Objective Robot Navigation,''
+IROS, 2025; arXiv:2404.04857.
+
+\bibitem{pushp2025}
+D.~Pushp \emph{et al.},
+``Navigating the Wild: Pareto-Optimal Visual Decision-Making in Image
+Space,''
+arXiv:2511.07750, 2025.
+
+\end{thebibliography}
+
+\end{document}

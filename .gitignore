@@ -104,6 +104,17 @@
 *.log
 **/logs/
 
+# LaTeX build artifacts
+*.aux
+*.toc
+*.out
+*.lof
+*.lot
+*.bbl
+*.blg
+*.synctex.gz
+*missfont.log
+
 # Environment and secrets
 **/.env
 **/.env.local
